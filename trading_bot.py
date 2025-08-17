@@ -1,0 +1,291 @@
+import asyncio
+import traceback
+from datetime import datetime, time
+from typing import Optional, Dict
+from kis_order import KisOrder
+from kis_account import KisAccount
+from rsi_strategy import RSIStrategy
+from utils.telegram_util import TelegramUtil
+
+
+class TradingBot:
+    """RSI 기반 자동매매 봇"""
+    
+    def __init__(self, 
+                 symbol: str = "TQQQ",
+                 market: str = "NASD",
+                 check_interval_minutes: int = 5):
+        
+        self.symbol = symbol
+        self.market = market
+        self.check_interval_minutes = check_interval_minutes
+        
+        # KIS API 객체들
+        self.kis_order = KisOrder()
+        self.kis_account = KisAccount()
+        
+        # RSI 전략
+        self.strategy = RSIStrategy(symbol=symbol, market="NAS")  # NAS for price inquiry
+        
+        # 텔레그램 유틸
+        self.telegram = TelegramUtil()
+        
+        # 봇 상태
+        self.is_running = False
+        self.total_trades = 0
+        self.start_time = None
+        
+        # 미국 장시간 (한국시간 기준)
+        self.market_start_time = time(23, 0)  # 23:00
+        self.market_end_time = time(4, 0)     # 04:00 (다음날)
+    
+    def is_market_hours(self):
+        """현재 시간이 미국 장시간인지 확인"""
+        now = datetime.now().time()
+        # 23:00 ~ 23:59 또는 00:00 ~ 04:00
+        return (now >= self.market_start_time or now <= self.market_end_time)
+    
+    def get_cash_balance(self):
+        """현재 현금 잔고 조회"""
+        try:
+            balance_info = self.kis_account.getBalance(market=self.market)
+            summary = balance_info.get('summary', {})
+            
+            # 주문가능현금 (USD)
+            cash_balance = float(summary.get('ord_psbl_cash', '0'))
+            return cash_balance
+            
+        except Exception as e:
+            print(f"잔고 조회 중 오류 발생: {e}")
+            return 0.0
+    
+    def get_stock_balance(self):
+        """현재 주식 보유량 조회"""
+        try:
+            balance_info = self.kis_account.getBalance(market=self.market)
+            stocks = balance_info.get('stocks', [])
+            
+            for stock in stocks:
+                if stock.get('pdno') == self.symbol:
+                    return {
+                        'quantity': int(stock.get('ord_psbl_qty', '0')),  # 주문가능수량
+                        'avg_price': float(stock.get('pchs_avg_pric', '0')),  # 매입평균가
+                        'current_price': float(stock.get('now_pric2', '0')),  # 현재가
+                        'profit_loss': float(stock.get('evlu_pfls_amt', '0'))  # 평가손익금액
+                    }
+            
+            return {'quantity': 0, 'avg_price': 0, 'current_price': 0, 'profit_loss': 0}
+            
+        except Exception as e:
+            print(f"주식 잔고 조회 중 오류 발생: {e}")
+            return {'quantity': 0, 'avg_price': 0, 'current_price': 0, 'profit_loss': 0}
+    
+    def calculate_buy_quantity(self, cash_balance: float, current_price: float):
+        """매수 수량 계산 (현금의 5%)"""
+        buy_amount = cash_balance * self.strategy.buy_percentage
+        quantity = int(buy_amount / current_price)
+        return max(1, quantity)  # 최소 1주
+    
+    def calculate_sell_quantity(self, stock_balance):
+        """매도 수량 계산 (보유량의 5%)"""
+        total_quantity = stock_balance['quantity']
+        sell_quantity = int(total_quantity * self.strategy.sell_percentage)
+        return max(1, min(sell_quantity, total_quantity))  # 최소 1주, 최대 보유량
+    
+    def execute_buy_order(self, current_price: float):
+        """매수 주문 실행"""
+        try:
+            cash_balance = self.get_cash_balance()
+            if cash_balance < current_price:
+                print(f"매수 불가: 현금 부족 (${cash_balance:.2f})")
+                return False
+            
+            quantity = self.calculate_buy_quantity(cash_balance, current_price)
+            
+            # 매수 주문 실행
+            result = self.kis_order.buyOrder(
+                symbol=self.symbol,
+                quantity=quantity,
+                price=current_price,
+                market=self.market,
+                ord_dvsn="00"  # 지정가 주문
+            )
+            
+            if result:
+                self.strategy.execute_buy()
+                self.total_trades += 1
+                
+                # 텔레그램 알림
+                rsi = self.strategy.get_current_rsi()
+                message = f"""[매수] {self.symbol} 주문 완료
+RSI: {rsi:.1f}
+매수량: {quantity}주 (${quantity * current_price:.2f})
+현재가: ${current_price:.2f}
+현금잔고: ${cash_balance:.2f}
+시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+                
+                self.telegram.sendMessage(message)
+                print(f"매수 주문 성공: {quantity}주 @ ${current_price:.2f}")
+                return True
+            
+        except Exception as e:
+            error_msg = f"매수 주문 실행 중 오류: {e}"
+            print(error_msg)
+            self.telegram.sendMessage(f"[오류] 매수 오류: {error_msg}")
+            
+        return False
+    
+    def execute_sell_order(self, current_price: float):
+        """매도 주문 실행"""
+        try:
+            stock_balance = self.get_stock_balance()
+            if stock_balance['quantity'] == 0:
+                print("매도 불가: 보유 주식 없음")
+                return False
+            
+            quantity = self.calculate_sell_quantity(stock_balance)
+            
+            # 매도 주문 실행
+            result = self.kis_order.sellOrder(
+                symbol=self.symbol,
+                quantity=quantity,
+                price=current_price,
+                market=self.market,
+                ord_dvsn="00"  # 지정가 주문
+            )
+            
+            if result:
+                self.strategy.execute_sell()
+                self.total_trades += 1
+                
+                # 텔레그램 알림
+                rsi = self.strategy.get_current_rsi()
+                profit_loss = stock_balance['profit_loss']
+                message = f"""[매도] {self.symbol} 주문 완료
+RSI: {rsi:.1f}
+매도량: {quantity}주 (${quantity * current_price:.2f})
+현재가: ${current_price:.2f}
+평가손익: ${profit_loss:.2f}
+남은수량: {stock_balance['quantity'] - quantity}주
+시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+                
+                self.telegram.sendMessage(message)
+                print(f"매도 주문 성공: {quantity}주 @ ${current_price:.2f}")
+                return True
+            
+        except Exception as e:
+            error_msg = f"매도 주문 실행 중 오류: {e}"
+            print(error_msg)
+            self.telegram.sendMessage(f"[오류] 매도 오류: {error_msg}")
+            
+        return False
+    
+    def process_trading_signal(self, current_price: float):
+        """매매 신호 처리"""
+        # 현재 RSI 가격 업데이트
+        self.strategy.update_price(current_price)
+        
+        # RSI 계산
+        rsi = self.strategy.get_current_rsi()
+        if rsi is None:
+            print("RSI 계산 불가 (데이터 부족)")
+            return
+        
+        print(f"{self.symbol} 현재가: ${current_price:.2f}, RSI: {rsi:.1f}")
+        
+        # 매수 신호 확인
+        if self.strategy.should_buy():
+            print(f"매수 신호 감지! RSI: {rsi:.1f}")
+            self.execute_buy_order(current_price)
+        
+        # 매도 신호 확인
+        elif self.strategy.should_sell():
+            print(f"매도 신호 감지! RSI: {rsi:.1f}")
+            self.execute_sell_order(current_price)
+    
+    async def start_trading(self):
+        """매매 봇 시작"""
+        self.is_running = True
+        self.start_time = datetime.now()
+        
+        print(f"RSI 자동매매 봇 시작: {self.symbol}")
+        print(f"체크 간격: {self.check_interval_minutes}분")
+        print(f"장시간: {self.market_start_time} - {self.market_end_time}")
+        
+        # 과거 데이터 로드 (실제 일봉 데이터 사용)
+        if not self.strategy.load_historical_data():
+            print("과거 데이터 로드 실패. 봇을 종료합니다.")
+            return
+        
+        # 시작 알림
+        start_msg = f"""[시작] RSI 자동매매 봇
+종목: {self.symbol}
+RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
+매수/매도 비율: {self.strategy.buy_percentage*100}%
+체크 간격: {self.check_interval_minutes}분"""
+        
+        self.telegram.sendMessage(start_msg)
+        
+        try:
+            while self.is_running:
+                # 장시간 체크
+                if not self.is_market_hours():
+                    print("장시간이 아닙니다. 대기 중...")
+                    await asyncio.sleep(60)  # 1분 대기
+                    continue
+                
+                try:
+                    # 현재가 조회
+                    price_info = self.strategy.kis_price.getPrice("NAS", self.symbol)
+                    current_price = float(price_info.get('last', 0))
+                    
+                    if current_price > 0:
+                        self.process_trading_signal(current_price)
+                    else:
+                        print("유효한 가격 정보를 가져올 수 없습니다.")
+                
+                except Exception as e:
+                    error_msg = f"매매 처리 중 오류: {e}"
+                    print(error_msg)
+                    print(traceback.format_exc())
+                
+                # 다음 체크까지 대기
+                await asyncio.sleep(self.check_interval_minutes * 60)
+                
+        except KeyboardInterrupt:
+            print("사용자에 의해 봇이 중단되었습니다.")
+        except Exception as e:
+            error_msg = f"봇 실행 중 치명적 오류: {e}"
+            print(error_msg)
+            self.telegram.sendMessage(f"[긴급] 봇 오류: {error_msg}")
+        finally:
+            await self.stop_trading()
+    
+    async def stop_trading(self):
+        """매매 봇 종료"""
+        self.is_running = False
+        
+        if self.start_time:
+            runtime = datetime.now() - self.start_time
+            
+            # 종료 알림
+            end_msg = f"""[종료] RSI 자동매매 봇
+총 거래횟수: {self.total_trades}
+운영시간: {str(runtime).split('.')[0]}
+종료시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+            
+            self.telegram.sendMessage(end_msg)
+        
+        print("매매 봇이 종료되었습니다.")
+    
+    def get_bot_status(self):
+        """봇 현재 상태 반환"""
+        strategy_status = self.strategy.get_strategy_status()
+        
+        return {
+            "is_running": self.is_running,
+            "start_time": self.start_time,
+            "total_trades": self.total_trades,
+            "is_market_hours": self.is_market_hours(),
+            "strategy": strategy_status
+        }

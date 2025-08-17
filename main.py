@@ -4,6 +4,7 @@ import sys
 import traceback
 from dotenv import load_dotenv
 from trading_bot import TradingBot
+from utils.logger_util import LoggerUtil
 
 # 환경변수 로드
 load_dotenv()
@@ -37,18 +38,21 @@ def checkEnvVariables():
 
 async def main_async():
     """비동기 메인 함수"""
+    # 로거 초기화
+    logger = LoggerUtil().get_logger()
+    
     # 환경변수 체크
     checkEnvVariables()
-    print("환경변수 체크 완료")
+    logger.info("환경변수 체크 완료")
     
     # 현재 환경 정보 출력
     is_virtual = True if os.getenv("IS_VIRTUAL").lower() == "true" else False
     env_type = "모의투자" if is_virtual else "실전투자"
-    print(f"현재 환경: {env_type}")
-    print(f"REST API URL: {os.getenv('REST_URL_BASE')}")
+    logger.info(f"현재 환경: {env_type}")
+    logger.info(f"REST API URL: {os.getenv('REST_URL_BASE')}")
     
     # RSI 자동매매 봇 시작
-    print("RSI 기반 자동매매 봇을 시작합니다...")
+    logger.info("RSI 기반 자동매매 봇을 시작합니다...")
     
     # 매매 봇 생성 및 시작 (테스트용 1분 간격)
     trading_bot = TradingBot(
@@ -61,14 +65,16 @@ async def main_async():
 
 def main():
     """메인 함수"""
+    logger = LoggerUtil().get_logger()
+    
     try:
         # 이벤트 루프 생성 및 비동기 함수 실행
         asyncio.run(main_async())
     except KeyboardInterrupt:
-        print("\n프로그램이 사용자에 의해 종료되었습니다.")
+        logger.info("\n프로그램이 사용자에 의해 종료되었습니다.")
     except Exception as e:
-        print(f"프로그램 실행 중 오류 발생: {e}")
-        print(traceback.format_exc())
+        logger.error(f"프로그램 실행 중 오류 발생: {e}")
+        logger.error(traceback.format_exc())
         sys.exit(-1)
 
 if __name__ == "__main__":

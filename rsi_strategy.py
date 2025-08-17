@@ -4,6 +4,7 @@ from ta.momentum import RSIIndicator
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from kis_price import KisPrice
+from utils.logger_util import LoggerUtil
 
 
 class PriceHistory:
@@ -71,7 +72,7 @@ class RSICalculator:
             return rsi_values.iloc[-1]
         
         except Exception as e:
-            print(f"RSI 계산 중 오류 발생: {e}")
+            self.logger.error(f"RSI 계산 중 오류 발생: {e}")
             return None
 
 
@@ -86,6 +87,9 @@ class RSIStrategy:
                  rsi_overbought: float = 70.0,
                  buy_percentage: float = 0.05,
                  sell_percentage: float = 0.05):
+        
+        # 로거 초기화
+        self.logger = LoggerUtil().get_logger()
         
         self.symbol = symbol
         self.market = market
@@ -110,7 +114,7 @@ class RSIStrategy:
     def load_historical_data(self, days: int = 30):
         """과거 데이터 로드 (장 시작 전 호출)"""
         try:
-            print(f"실제 일봉 데이터 로딩 중...")
+            self.logger.info(f"실제 일봉 데이터 로딩 중...")
             
             # 일봉 데이터 조회 (더 안정적인 RSI 계산을 위해)
             chart_data = self.kis_price.getDailyPrice(
@@ -120,7 +124,7 @@ class RSIStrategy:
             )
             
             if not chart_data:
-                print("일봉 데이터 조회 실패, 분봉 데이터로 시도...")
+                self.logger.warning("일봉 데이터 조회 실패, 분봉 데이터로 시도...")
                 return self._load_minute_data()
             
             # 일봉 데이터 처리 (시간순으로 정렬)
@@ -138,23 +142,23 @@ class RSIStrategy:
                 except (ValueError, KeyError):
                     continue
             
-            print(f"총 {self.price_history.get_length()}개의 일봉 데이터 로드 완료")
+            self.logger.info(f"총 {self.price_history.get_length()}개의 일봉 데이터 로드 완료")
             
             # 데이터가 부족하면 분봉으로 보완
             if self.price_history.get_length() < 15:
-                print("일봉 데이터 부족, 분봉으로 보완...")
+                self.logger.warning("일봉 데이터 부족, 분봉으로 보완...")
                 return self._load_minute_data()
             
             return True
             
         except Exception as e:
-            print(f"데이터 로드 중 오류 발생: {e}")
+            self.logger.error(f"데이터 로드 중 오류 발생: {e}")
             raise e
     
     def _load_minute_data(self):
         """분봉 데이터 로드 (일봉 실패시 대체)"""
         try:
-            print("분봉 데이터로 RSI 계산...")
+            self.logger.info("분봉 데이터로 RSI 계산...")
             
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
@@ -180,11 +184,11 @@ class RSIStrategy:
                 except (ValueError, KeyError):
                     continue
             
-            print(f"총 {self.price_history.get_length()}개의 분봉 데이터 로드 완료")
+            self.logger.info(f"총 {self.price_history.get_length()}개의 분봉 데이터 로드 완료")
             return self.price_history.get_length() >= 15
             
         except Exception as e:
-            print(f"분봉 데이터 로드 실패: {e}")
+            self.logger.error(f"분봉 데이터 로드 실패: {e}")
             raise e
     
     def update_price(self, price: float):

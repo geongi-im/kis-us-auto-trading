@@ -3,11 +3,15 @@ import requests
 import json
 import traceback
 from utils.token_manager import getToken
+from utils.logger_util import LoggerUtil
 
 class KisBase:
     """한국투자증권 API 기본 클래스 - 공통 인증 및 요청 처리"""
     
     def __init__(self):
+        # 로거 초기화
+        self.logger = LoggerUtil().get_logger()
+        
         # 실전/모의 구분
         self.is_virtual = True if os.getenv("IS_VIRTUAL", "true").lower() == "true" else False
         
@@ -59,19 +63,19 @@ class KisBase:
                 raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
             
             if response.status_code != 200:
-                print(f"API 요청 오류: {response.status_code}")
-                print(response.text)
+                self.logger.error(f"API 요청 오류: {response.status_code}")
+                self.logger.error(response.text)
                 raise Exception(f"API 요청 실패: {path}")
                 
             res_data = response.json()
             
             if res_data.get('rt_cd') != '0':
-                print(f"API 오류: {res_data.get('msg_cd')} - {res_data.get('msg1')}")
+                self.logger.error(f"API 오류: {res_data.get('msg_cd')} - {res_data.get('msg1')}")
                 raise Exception(f"API 응답 오류: {res_data.get('msg1')}")
                 
             return res_data
         
         except Exception as e:
-            print(f"API 요청 중 오류 발생: {e}")
-            print(traceback.format_exc())
+            self.logger.error(f"API 요청 중 오류 발생: {e}")
+            self.logger.error(traceback.format_exc())
             raise e 

@@ -64,9 +64,9 @@ class KisOrder(KisBase):
         path = "uapi/overseas-stock/v1/trading/order"
         
         result = self.sendRequest("POST", path, tr_id, body=body)
-        print(f"주문 성공: {result['msg1']}")
+        self.logger.info(f"주문 성공: {result['msg1']}")
         if 'output' in result:
-            print(f"주문번호: {result['output'].get('KRX_FWDG_ORD_ORGNO', '')}+{result['output'].get('ODNO', '')}+{result['output'].get('ORD_TMD', '')}")
+            self.logger.info(f"주문번호: {result['output'].get('KRX_FWDG_ORD_ORGNO', '')}+{result['output'].get('ODNO', '')}+{result['output'].get('ORD_TMD', '')}")
         
         return result.get('output', {})
     
@@ -128,9 +128,9 @@ class KisOrder(KisBase):
         path = "uapi/overseas-stock/v1/trading/order"
         
         result = self.sendRequest("POST", path, tr_id, body=body)
-        print(f"매도 주문 성공: {result['msg1']}")
+        self.logger.info(f"매도 주문 성공: {result['msg1']}")
         if 'output' in result:
-            print(f"주문번호: {result['output'].get('KRX_FWDG_ORD_ORGNO', '')}+{result['output'].get('ODNO', '')}+{result['output'].get('ORD_TMD', '')}")
+            self.logger.info(f"주문번호: {result['output'].get('KRX_FWDG_ORD_ORGNO', '')}+{result['output'].get('ODNO', '')}+{result['output'].get('ORD_TMD', '')}")
         
         return result.get('output', {})
     
@@ -163,7 +163,7 @@ class KisOrder(KisBase):
         path = "uapi/overseas-stock/v1/trading/order-rvsecncl"
         
         result = self.sendRequest("POST", path, tr_id, body=body)
-        print(f"정정 주문 성공: {result['msg1']}")
+        self.logger.info(f"정정 주문 성공: {result['msg1']}")
         
         return result.get('output', {})
     
@@ -195,6 +195,6 @@ class KisOrder(KisBase):
         path = "uapi/overseas-stock/v1/trading/order-rvsecncl"
         
         result = self.sendRequest("POST", path, tr_id, body=body)
-        print(f"취소 주문 성공: {result['msg1']}")
+        self.logger.info(f"취소 주문 성공: {result['msg1']}")
         
         return result.get('output', {}) 

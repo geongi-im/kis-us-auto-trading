@@ -72,17 +72,21 @@ class TradingBot:
         return False
     
     def get_cash_balance(self):
-        """현재 현금 잔고 조회"""
+        """현재 매수가능현금 조회"""
         try:
+            # getBalance로 매수가능한 외화금액 조회
             balance_info = self.kis_account.getBalance(market=self.market)
             summary = balance_info.get('summary', {})
             
-            # 주문가능현금 (USD)
-            cash_balance = float(summary.get('ord_psbl_cash', '0'))
+            # 매수가능현금 (USD)
+            # frcr_pchs_amt1: 외화매수가능금액1 (실제 매수 가능한 현금)
+            cash_balance = float(summary.get('frcr_pchs_amt1', '0'))
+            
+            self.logger.debug(f"매수가능현금: ${cash_balance:.2f}")
             return cash_balance
             
         except Exception as e:
-            self.logger.error(f"잔고 조회 중 오류 발생: {e}")
+            self.logger.error(f"매수가능현금 조회 중 오류 발생: {e}")
             return 0.0
     
     def get_stock_balance(self):

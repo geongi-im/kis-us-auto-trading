@@ -44,7 +44,7 @@ class KisBase:
             
         return headers
     
-    def sendRequest(self, method, path, tr_id, params=None, body=None):
+    def sendRequest(self, method, path, tr_id, params=None, body=None, retry_count=0):
         """API 요청 전송 공통 메서드"""
         import time
         
@@ -62,12 +62,25 @@ class KisBase:
             else:
                 raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
             
+            res_data = response.json()
+            
+            # 토큰 만료 에러 체크 (응답 코드와 상관없이 먼저 확인)
+            if res_data.get('msg_cd') == 'EGW00123' and retry_count == 0:
+                self.logger.info("토큰이 만료되어 자동 갱신을 시도합니다.")
+                try:
+                    # 토큰 재발급
+                    self.access_token = getToken()
+                    self.logger.info("토큰 갱신 완료, API 요청을 다시 시도합니다.")
+                    # 갱신된 토큰으로 재시도 (1회만)
+                    return self.sendRequest(method, path, tr_id, params, body, retry_count + 1)
+                except Exception as token_error:
+                    self.logger.error(f"토큰 갱신 실패: {token_error}")
+                    raise Exception(f"토큰 갱신 실패: {token_error}")
+            
             if response.status_code != 200:
                 self.logger.error(f"API 요청 오류: {response.status_code}")
                 self.logger.error(response.text)
                 raise Exception(f"API 요청 실패: {path}")
-                
-            res_data = response.json()
             
             if res_data.get('rt_cd') != '0':
                 self.logger.error(f"API 오류: {res_data.get('msg_cd')} - {res_data.get('msg1')}")

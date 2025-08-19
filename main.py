@@ -58,7 +58,7 @@ async def main_async():
     trading_bot = TradingBot(
         symbol="TQQQ",
         market="NASD",
-        check_interval_minutes=5
+        check_interval_minutes=1
     )
     
     await trading_bot.start_trading()

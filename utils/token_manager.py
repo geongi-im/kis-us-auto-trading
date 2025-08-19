@@ -46,10 +46,19 @@ def getToken():
     if token:
         return token
         
+    # 만료된 토큰 파일 삭제
+    if os.path.exists(TOKEN_FILE):
+        os.remove(TOKEN_FILE)
+        
     # 환경변수에서 값 가져오기
     app_key = os.getenv("APP_KEY")
     app_secret = os.getenv("APP_SECRET")
+    
+    # REST_URL_BASE가 설정되지 않았다면 IS_VIRTUAL 값에 따라 설정
     url_base = os.getenv("REST_URL_BASE")
+    if not url_base:
+        is_virtual = os.getenv("IS_VIRTUAL", "true").lower() == "true"
+        url_base = "https://openapivts.koreainvestment.com:29443" if is_virtual else "https://openapi.koreainvestment.com:9443"
 
     # 새로운 토큰 발급
     headers = {"content-type":"application/json"}
@@ -74,9 +83,14 @@ def getToken():
 def getApprovalKey():
     """웹소켓 접속키를 발급받는 함수"""
     # 환경변수에서 값 가져오기
-    REST_URL_BASE = os.getenv("REST_URL_BASE")
     APP_KEY = os.getenv("APP_KEY")
     APP_SECRET = os.getenv("APP_SECRET")
+    
+    # REST_URL_BASE가 설정되지 않았다면 IS_VIRTUAL 값에 따라 설정
+    REST_URL_BASE = os.getenv("REST_URL_BASE")
+    if not REST_URL_BASE:
+        is_virtual = os.getenv("IS_VIRTUAL", "true").lower() == "true"
+        REST_URL_BASE = "https://openapivts.koreainvestment.com:29443" if is_virtual else "https://openapi.koreainvestment.com:9443"
     
     headers = {"content-type": "application/json"}
     body = {

@@ -29,7 +29,7 @@ class TradingBot:
         self.kis_account = KisAccount()
         
         # RSI 전략
-        self.strategy = RSIStrategy(symbol=symbol, market="NAS")  # NAS for price inquiry
+        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=60)
         
         # 텔레그램 유틸
         self.telegram = TelegramUtil()
@@ -242,6 +242,14 @@ RSI: {rsi:.1f}
         if not self.strategy.load_historical_data():
             self.logger.error("과거 데이터 로드 실패. 봇을 종료합니다.")
             return
+
+        # 잔고 조회
+        cash_balance = self.get_cash_balance()
+        self.logger.info(f"현재 현금 잔고: ${cash_balance:.2f}")
+
+        # 주식 보유량 조회
+        # stock_balance = self.get_stock_balance()
+        # self.logger.info(f"현재 주식 보유량: {stock_balance['quantity']}주")
         
         # 시작 알림
         start_msg = f"""[시작] RSI 자동매매 봇

@@ -205,15 +205,48 @@ class KisAccount(KisBase):
             "details": result.get('output1', [])
         }
     
-    def getOverseasPurchaseAmount(self, dvsn="01", natn="840", inqr_dvsn="00"):
-        """해외주식 매수가능금액 조회
+    def getOverseasPresentBalance(self, wcrc_frcr_dvsn="01", natn_cd="840", tr_mket_cd="00", inqr_dvsn_cd="00"):
+        """해외주식 체결기준현재잔고 조회 (매수가능 예수금 포함)
         Args:
-            dvsn (str): 원화외화구분코드 (01:원화, 02:외화)
-            natn (str): 국가코드 (840:미국, 000:전체, 344:홍콩, 156:중국, 392:일본, 704:베트남)  
-            inqr_dvsn (str): 조회구분 (00:전체, 01:일반해외주식, 02:미니스탁)
+            wcrc_frcr_dvsn (str): 원화외화구분코드 (01:원화, 02:외화)
+            natn_cd (str): 국가코드 (000:전체, 840:미국, 344:홍콩, 156:중국, 392:일본, 704:베트남)
+            tr_mket_cd (str): 거래시장코드 (00:전체)
+            inqr_dvsn_cd (str): 조회구분코드 (00:전체, 01:일반해외주식, 02:미니스탁)
             
         Returns:
-            dict: 매수가능금액 정보
+            dict: 체결기준현재잔고 정보 (output1: 보유종목, output2: 계좌요약, output3: 예수금정보)
+        """
+        # 실전/모의투자 tr_id 구분
+        tr_id = "CTRP6504R" if not self.is_virtual else "VTRP6504R"
+        
+        params = {
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
+            "WCRC_FRCR_DVSN_CD": wcrc_frcr_dvsn,
+            "NATN_CD": natn_cd,
+            "TR_MKET_CD": tr_mket_cd,
+            "INQR_DVSN_CD": inqr_dvsn_cd
+        }
+        
+        path = "uapi/overseas-stock/v1/trading/inquire-present-balance"
+        
+        result = self.sendRequest("GET", path, tr_id, params=params)
+        
+        return {
+            "stocks": result.get('output1', []),       # 보유 종목 리스트
+            "summary": result.get('output2', {}),      # 계좌 요약 정보
+            "deposit_info": result.get('output3', {})  # 예수금 정보
+        }
+    
+    def getOverseasPurchaseAmount(self, market="NASD", price="0", symbol=""):
+        """해외주식 매수가능금액조회
+        Args:
+            market (str): 해외거래소코드 (NASD : 나스닥 / NYSE : 뉴욕 / AMEX : 아멕스 / SEHK : 홍콩 / SHAA : 중국상해 / SZAA : 중국심천 / TKSE : 일본 / HASE : 하노이거래소 / VNSE : 호치민거래소)
+            price (str): 해외주문단가 (23.8) 정수부분 23자리, 소수부분 8자리
+            symbol (str): 종목코드
+            
+        Returns:
+            dict: 해외주식 매수 가능금액 조회 정보 (output: 매수가능금액)
         """
         # 실전/모의투자 tr_id 구분
         tr_id = "TTTS3007R" if not self.is_virtual else "VTTS3007R"
@@ -221,15 +254,11 @@ class KisAccount(KisBase):
         params = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
-            "OVRS_EXCG_CD": dvsn,
-            "OVRS_ORD_UNPR": natn,
-            "ITEM_CD": inqr_dvsn,
-            "TR_CONT": "",
-            "FK100": "",
-            "NK100": ""
+            "OVRS_EXCG_CD": market, #해외거래소코드
+            "OVRS_ORD_UNPR": price, # 해외주문단가 (23.8) 정수부분 23자리, 소수부분 8자리
+            "ITEM_CD": symbol, #종목코드
         }
         
         path = "uapi/overseas-stock/v1/trading/inquire-psamount"
-        
         result = self.sendRequest("GET", path, tr_id, params=params)
-        return result.get('output', {}) 
+        return result.get('output', {})

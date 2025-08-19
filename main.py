@@ -34,8 +34,6 @@ def checkEnvVariables():
     os.environ['REST_URL_BASE'] = VIRTUAL_REST_URL if is_virtual == "true" else REAL_REST_URL
     os.environ['WS_URL_BASE'] = VIRTUAL_WS_URL if is_virtual == "true" else REAL_WS_URL
 
-
-
 async def main_async():
     """비동기 메인 함수"""
     # 로거 초기화

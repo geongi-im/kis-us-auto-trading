@@ -109,6 +109,22 @@ class TradingBot:
         except Exception as e:
             self.logger.error(f"주식 잔고 조회 중 오류 발생: {e}")
             return {'quantity': 0, 'avg_price': 0, 'current_price': 0, 'profit_loss': 0}
+        
+    def getPurchaseAmount(self, price="0", symbol=""):
+        """특정 종목 기준 매수 가능 금액 조회"""
+        try:
+            # getOverseasPurchaseAmount로 매수가능한 외화금액 조회
+            balance_info = self.kis_account.getOverseasPurchaseAmount(market=self.market, price=price, symbol=symbol)
+            
+            # 매수가능현금 (USD)
+            cash_balance = float(balance_info.get('ord_psbl_frcr_amt', '0'))
+            
+            self.logger.debug(f"매수가능현금: ${cash_balance:.2f}")
+            return cash_balance
+            
+        except Exception as e:
+            self.logger.error(f"매수가능현금 조회 중 오류 발생: {e}")
+            return 0.0
     
     def calculate_buy_quantity(self, cash_balance: float, current_price: float):
         """매수 수량 계산 (현금의 5%)"""
@@ -125,7 +141,7 @@ class TradingBot:
     def execute_buy_order(self, current_price: float):
         """매수 주문 실행"""
         try:
-            cash_balance = self.get_cash_balance()
+            cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
             if cash_balance < current_price:
                 self.logger.warning(f"매수 불가: 현금 부족 (${cash_balance:.2f})")
                 return False
@@ -241,16 +257,16 @@ RSI: {rsi:.1f}
         self.logger.info(f"RSI 자동매매 봇 시작: {self.symbol}")
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
+
+        # 해외주식 매수가능금액 조회
+        # purchase_amount = self.kis_account.getOverseasPurchaseAmount(market="NASD", price="90.4200", symbol="TQQQ")
+        # print(purchase_amount)
         
         # 과거 데이터 로드 (실제 일봉 데이터 사용)
         if not self.strategy.load_historical_data():
             self.logger.error("과거 데이터 로드 실패. 봇을 종료합니다.")
             return
-
-        # 잔고 조회
-        cash_balance = self.get_cash_balance()
-        self.logger.info(f"현재 현금 잔고: ${cash_balance:.2f}")
-
+        
         # 주식 보유량 조회
         # stock_balance = self.get_stock_balance()
         # self.logger.info(f"현재 주식 보유량: {stock_balance['quantity']}주")

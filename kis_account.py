@@ -203,4 +203,33 @@ class KisAccount(KisBase):
         return {
             "summary": summary,
             "details": result.get('output1', [])
-        } 
+        }
+    
+    def getOverseasPurchaseAmount(self, dvsn="01", natn="840", inqr_dvsn="00"):
+        """해외주식 매수가능금액 조회
+        Args:
+            dvsn (str): 원화외화구분코드 (01:원화, 02:외화)
+            natn (str): 국가코드 (840:미국, 000:전체, 344:홍콩, 156:중국, 392:일본, 704:베트남)  
+            inqr_dvsn (str): 조회구분 (00:전체, 01:일반해외주식, 02:미니스탁)
+            
+        Returns:
+            dict: 매수가능금액 정보
+        """
+        # 실전/모의투자 tr_id 구분
+        tr_id = "TTTS3007R" if not self.is_virtual else "VTTS3007R"
+        
+        params = {
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
+            "OVRS_EXCG_CD": dvsn,
+            "OVRS_ORD_UNPR": natn,
+            "ITEM_CD": inqr_dvsn,
+            "TR_CONT": "",
+            "FK100": "",
+            "NK100": ""
+        }
+        
+        path = "uapi/overseas-stock/v1/trading/inquire-psamount"
+        
+        result = self.sendRequest("GET", path, tr_id, params=params)
+        return result.get('output', {}) 

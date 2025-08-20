@@ -1,5 +1,6 @@
 from kis_base import KisBase
 from datetime import datetime, timedelta
+import pytz
 
 class KisAccount(KisBase):
     """계좌 관련 API"""
@@ -266,21 +267,34 @@ class KisAccount(KisBase):
     def getOverseasOrderHistory(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD"):
         """현지시간 기준 특정 종목의 해외주식 주문체결내역 조회
         Args:
-            symbol (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열)
+            symbol (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열) - 모의계좌는 ""만 가능
             start_date (str): 주문시작일자 (YYYYMMDD, 현지시각 기준)
             end_date (str): 주문종료일자 (YYYYMMDD, 현지시각 기준)
             order_div (str): 매도매수구분 (00:전체, 01:매도, 02:매수) - 모의계좌는 00만 가능
             settle_div (str): 체결미체결구분 (00:전체, 01:체결, 02:미체결) - 모의계좌는 00만 가능
-            market (str): 해외거래소코드 (NASD:나스닥, NYSE:뉴욕, AMEX:아멕스, SEHK:홍콩, SHAA:중국상해, SZAA:중국심천, TKSE:일본, HASE:베트남하노이, VNSE:호치민)
+            market (str): 해외거래소코드 (NASD:나스닥, NYSE:뉴욕, AMEX:아멕스 등) - 모의계좌는 ""만 가능
             
         Returns:
             list: 주문체결내역 리스트 (연속조회 포함하여 모든 데이터 반환)
         """
-        # 시작/종료일이 없으면 오늘 날짜로 설정
+        # 미국 현지시간 기준으로 날짜 설정
+        def get_us_date():
+            us_timezone = pytz.timezone('America/New_York')
+            us_now = datetime.now(us_timezone)
+            return us_now.strftime("%Y%m%d")
+        
+        # 시작/종료일이 없으면 미국 현지시간 기준 오늘 날짜로 설정
         if not start_date:
-            start_date = datetime.today().strftime("%Y%m%d")
+            start_date = get_us_date()
         if not end_date:
-            end_date = datetime.today().strftime("%Y%m%d")
+            end_date = get_us_date()
+        
+        # 모의투자 제약사항 적용
+        if self.is_virtual:
+            symbol = ""           # 모의투자는 ""만 가능
+            order_div = "00"      # 모의투자는 00만 가능
+            settle_div = "00"     # 모의투자는 00만 가능  
+            market = ""           # 모의투자는 ""만 가능
         
         # 실전/모의투자 tr_id 구분
         tr_id = "TTTS3035R" if not self.is_virtual else "VTTS3035R"
@@ -294,13 +308,13 @@ class KisAccount(KisBase):
             params = {
                 "CANO": self.cano,
                 "ACNT_PRDT_CD": self.acnt_prdt_cd,
-                "PDNO": symbol if symbol else "%",  # 전종목일 경우 "%" 입력, 모의계좌는 ""만 가능
+                "PDNO": symbol if symbol else ("%" if not self.is_virtual else ""),  # 실전: 전종목시 "%", 모의: ""
                 "ORD_STRT_DT": start_date,          # 주문시작일자 (현지시각 기준)
                 "ORD_END_DT": end_date,             # 주문종료일자 (현지시각 기준)
                 "SLL_BUY_DVSN": order_div,          # 매도매수구분
                 "CCLD_NCCS_DVSN": settle_div,       # 체결미체결구분
                 "OVRS_EXCG_CD": market,             # 해외거래소코드
-                "SORT_SQN": "DS",                   # DS:정순, AS:역순 (모의계좌는 정렬순서 사용불가)
+                "SORT_SQN": "DS",                   # DS:정순 (모의계좌는 DS만 가능)
                 "ORD_DT": "",                       # 주문일자 (공백)
                 "ORD_GNO_BRNO": "",                 # 주문채번지점번호 (공백)
                 "ODNO": "",                         # 주문번호 (공백)

@@ -258,6 +258,9 @@ RSI: {rsi:.1f}
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
 
+        result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ")
+        print(result)
+
         # 해외주식 매수가능금액 조회
         # purchase_amount = self.kis_account.getOverseasPurchaseAmount(market="NASD", price="90.4200", symbol="TQQQ")
         # print(purchase_amount)

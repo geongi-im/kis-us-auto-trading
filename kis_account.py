@@ -264,7 +264,7 @@ class KisAccount(KisBase):
         result = self.sendRequest("GET", path, tr_id, params=params)
         return result.get('output', {})
     
-    def getOverseasOrderHistory(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD", sort="DS"):
+    def getOverseasOrderHistory(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD", sort="DS", ctx_area_fk200="", ctx_area_nk200=""):
         """현지시간 기준 특정 종목의 해외주식 주문체결내역 조회
         Args:
             symbol (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열) - 모의계좌는 ""만 가능
@@ -274,9 +274,11 @@ class KisAccount(KisBase):
             settle_div (str): 체결미체결구분 (00:전체, 01:체결, 02:미체결) - 모의계좌는 00만 가능
             market (str): 해외거래소코드 (NASD:나스닥, NYSE:뉴욕, AMEX:아멕스 등) - 모의계좌는 ""만 가능
             sort (str): 정렬순서 (DS:정순, AS:역순) - 모의계좌는 DS만 가능
+            ctx_area_fk200 (str): 연속조회키1 (첫 호출시 공백, 연속조회시 이전 응답값 사용)
+            ctx_area_nk200 (str): 연속조회키2 (첫 호출시 공백, 연속조회시 이전 응답값 사용)
             
         Returns:
-            list: 주문체결내역 리스트 (연속조회 포함하여 모든 데이터 반환)
+            dict: {'data': 주문체결내역 리스트, 'ctx_area_fk200': 연속조회키1, 'ctx_area_nk200': 연속조회키2, 'has_more': 추가데이터여부}
         """
         # 미국 현지시간 기준으로 날짜 설정
         def get_us_date():
@@ -301,47 +303,87 @@ class KisAccount(KisBase):
         # 실전/모의투자 tr_id 구분
         tr_id = "TTTS3035R" if not self.is_virtual else "VTTS3035R"
         
+        params = {
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
+            "PDNO": symbol if symbol else ("%" if not self.is_virtual else ""),  # 실전: 전종목시 "%", 모의: ""
+            "ORD_STRT_DT": start_date,          # 주문시작일자 (현지시각 기준)
+            "ORD_END_DT": end_date,             # 주문종료일자 (현지시각 기준)
+            "SLL_BUY_DVSN": order_div,          # 매도매수구분
+            "CCLD_NCCS_DVSN": settle_div,       # 체결미체결구분
+            "OVRS_EXCG_CD": market,             # 해외거래소코드
+            "SORT_SQN": sort,                   # DS:정순 (모의계좌는 DS만 가능)
+            "ORD_DT": "",                       # 주문일자 (공백)
+            "ORD_GNO_BRNO": "",                 # 주문채번지점번호 (공백)
+            "ODNO": "",                         # 주문번호 (공백)
+            "CTX_AREA_FK200": ctx_area_fk200,   # 연속조회키1
+            "CTX_AREA_NK200": ctx_area_nk200    # 연속조회키2
+        }
+        
+        path = "uapi/overseas-stock/v1/trading/inquire-ccnl"
+        result = self.sendRequest("GET", path, tr_id, params=params)
+
+        # 데이터 추출
+        data = result.get('output', [])
+        
+        # 연속조회키 추출
+        next_ctx_area_fk200 = result.get('ctx_area_fk200', '')
+        next_ctx_area_nk200 = result.get('ctx_area_nk200', '').strip()
+        has_more = bool(next_ctx_area_nk200)
+        
+        self.logger.info(f"해외주식 주문내역 조회: {len(data)}건 조회, 연속조회 가능: {has_more}")
+        if has_more:
+            self.logger.info(f"연속조회키: {next_ctx_area_nk200[:20]}...")
+        
+        return {
+            'data': data,
+            'ctx_area_fk200': next_ctx_area_fk200,
+            'ctx_area_nk200': next_ctx_area_nk200,
+            'has_more': has_more
+        }
+    
+    def getOverseasOrderHistoryAll(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD", sort="DS"):
+        """현지시간 기준 특정 종목의 해외주식 주문체결내역 전체 조회 (연속조회 자동 처리)
+        Args:
+            symbol (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열) - 모의계좌는 ""만 가능
+            start_date (str): 주문시작일자 (YYYYMMDD, 현지시각 기준)
+            end_date (str): 주문종료일자 (YYYYMMDD, 현지시각 기준)
+            order_div (str): 매도매수구분 (00:전체, 01:매도, 02:매수) - 모의계좌는 00만 가능
+            settle_div (str): 체결미체결구분 (00:전체, 01:체결, 02:미체결) - 모의계좌는 00만 가능
+            market (str): 해외거래소코드 (NASD:나스닥, NYSE:뉴욕, AMEX:아멕스 등) - 모의계좌는 ""만 가능
+            sort (str): 정렬순서 (DS:정순, AS:역순) - 모의계좌는 DS만 가능
+            
+        Returns:
+            list: 모든 주문체결내역 리스트
+        """
         all_data = []
-        tr_cont = ""
         ctx_area_fk200 = ""
         ctx_area_nk200 = ""
         page_count = 0
         
         while True:
             page_count += 1
-            params = {
-                "CANO": self.cano,
-                "ACNT_PRDT_CD": self.acnt_prdt_cd,
-                "PDNO": symbol if symbol else ("%" if not self.is_virtual else ""),  # 실전: 전종목시 "%", 모의: ""
-                "ORD_STRT_DT": start_date,          # 주문시작일자 (현지시각 기준)
-                "ORD_END_DT": end_date,             # 주문종료일자 (현지시각 기준)
-                "SLL_BUY_DVSN": order_div,          # 매도매수구분
-                "CCLD_NCCS_DVSN": settle_div,       # 체결미체결구분
-                "OVRS_EXCG_CD": market,             # 해외거래소코드
-                "SORT_SQN": sort,                   # DS:정순 (모의계좌는 DS만 가능)
-                "ORD_DT": "",                       # 주문일자 (공백)
-                "ORD_GNO_BRNO": "",                 # 주문채번지점번호 (공백)
-                "ODNO": "",                         # 주문번호 (공백)
-                "CTX_AREA_FK200": ctx_area_fk200,   # 연속조회키1
-                "CTX_AREA_NK200": ctx_area_nk200    # 연속조회키2
-            }
+            result = self.getOverseasOrderHistory(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                order_div=order_div,
+                settle_div=settle_div,
+                market=market,
+                sort=sort,
+                ctx_area_fk200=ctx_area_fk200,
+                ctx_area_nk200=ctx_area_nk200
+            )
             
-            path = "uapi/overseas-stock/v1/trading/inquire-ccnl"
-            result = self.sendRequest("GET", path, tr_id, params=params)
-
             # 현재 페이지 데이터 추가
-            current_data = result.get('output', [])
+            current_data = result['data']
             if current_data:
                 all_data.extend(current_data)
-                self.logger.info(f"해외주식 주문내역 조회 {page_count}페이지: {len(current_data)}건 조회")
-            else:
-                self.logger.info(f"해외주식 주문내역 조회 {page_count}페이지: 데이터 없음")
             
-            # 연속조회 확인 - ctx_area_nk200가 있으면 연속조회
-            ctx_area_nk200 = result.get('ctx_area_nk200', '').strip()
-            if ctx_area_nk200:  # 연속조회키가 있으면 계속 조회
-                ctx_area_fk200 = result.get('ctx_area_fk200', '')
-                self.logger.info(f"연속조회키 발견, 다음 페이지 조회 중... (키: {ctx_area_nk200[:20]}...)")
+            # 연속조회 확인
+            if result['has_more']:
+                ctx_area_fk200 = result['ctx_area_fk200']
+                ctx_area_nk200 = result['ctx_area_nk200']
                 
                 # API 호출 제한을 위한 지연
                 import time
@@ -349,5 +391,5 @@ class KisAccount(KisBase):
             else:
                 break
         
-        self.logger.info(f"해외주식 주문내역 조회 완료: 총 {len(all_data)}건, {page_count}페이지")
+        self.logger.info(f"해외주식 주문내역 전체 조회 완료: 총 {len(all_data)}건, {page_count}페이지")
         return all_data

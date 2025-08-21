@@ -10,6 +10,7 @@ class DateTimeUtil:
     """미국 주식 거래를 위한 시간 관련 유틸리티"""
     
     US_TIMEZONE = pytz.timezone('America/New_York')
+    KR_TIMEZONE = pytz.timezone('Asia/Seoul')
     
     @classmethod
     def get_us_now(cls):
@@ -42,6 +43,21 @@ class DateTimeUtil:
         return cls.US_TIMEZONE.localize(dt)
     
     @classmethod
+    def parse_kr_datetime(cls, date_str, time_str="000000"):
+        """한국시간으로 날짜/시간 문자열 파싱
+        
+        Args:
+            date_str (str): 날짜 문자열 (YYYYMMDD)
+            time_str (str): 시간 문자열 (HHMMSS), 기본값 000000
+            
+        Returns:
+            datetime: 한국시간으로 설정된 datetime 객체
+        """
+        datetime_str = f"{date_str}{time_str}"
+        dt = datetime.strptime(datetime_str, "%Y%m%d%H%M%S")
+        return cls.KR_TIMEZONE.localize(dt)
+    
+    @classmethod
     def get_time_diff_minutes(cls, start_time, end_time=None):
         """두 시간 사이의 차이를 분 단위로 반환
         
@@ -54,5 +70,21 @@ class DateTimeUtil:
         """
         if end_time is None:
             end_time = cls.get_us_now()
+        
+        return abs((end_time - start_time).total_seconds() / 60)
+    
+    @classmethod
+    def get_time_diff_minutes_kr(cls, start_time, end_time=None):
+        """두 시간 사이의 차이를 분 단위로 반환 (한국시간 기준)
+        
+        Args:
+            start_time (datetime): 시작 시간 (한국시간)
+            end_time (datetime): 종료 시간 (기본: 현재 한국시간)
+            
+        Returns:
+            float: 시간 차이 (분) - 항상 양수
+        """
+        if end_time is None:
+            end_time = datetime.now(cls.KR_TIMEZONE)
         
         return abs((end_time - start_time).total_seconds() / 60)

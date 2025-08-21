@@ -171,7 +171,7 @@ class TradingBot:
         return max(1, min(sell_quantity, total_quantity))  # 최소 1주, 최대 보유량
     
     def get_last_buy_order_time(self):
-        """가장 마지막 매수 주문 시간 조회 (미국 현지시간)"""
+        """가장 마지막 매수 주문 시간 조회 (한국시간)"""
         try:
             today_str = DateTimeUtil.get_us_date_str()
             
@@ -195,13 +195,13 @@ class TradingBot:
             # ord_dt와 ord_tmd 기준으로 내림차순 정렬 (최신순)
             buy_orders.sort(key=lambda x: (x.get('ord_dt', ''), x.get('ord_tmd', '')), reverse=True)
             
-            # 가장 최신 매수 주문의 시간 반환 (미국 현지시간)
+            # 가장 최신 매수 주문의 시간 반환 (한국시간)
             latest_order = buy_orders[0]
             order_date = latest_order.get('ord_dt', '')  # YYYYMMDD
             order_time = latest_order.get('ord_tmd', '')  # HHMMSS
             
             if order_date and order_time:
-                return DateTimeUtil.parse_us_datetime(order_date, order_time)
+                return DateTimeUtil.parse_kr_datetime(order_date, order_time)
                 
         except Exception as e:
             self.logger.error(f"마지막 매수 주문 시간 조회 중 오류: {e}")
@@ -214,10 +214,10 @@ class TradingBot:
         if not self.strategy.get_buy_signal():
             return False
         
-        # 쿨다운 시간 체크
+        # 쿨다운 시간 체크 (한국시간 기준)
         last_buy_time = self.get_last_buy_order_time()
         if last_buy_time:
-            time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
+            time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_buy_time)
             if time_diff < self.cooldown_minutes:
                 remaining_minutes = self.cooldown_minutes - time_diff
                 self.logger.debug(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
@@ -232,19 +232,10 @@ class TradingBot:
         return True
     
     def should_sell(self):
-        """매도 신호 종합 판단 (RSI + 쿨다운 + 보유 주식 조건)"""
+        """매도 신호 종합 판단 (RSI + 보유 주식 조건)"""
         # RSI 신호 확인
         if not self.strategy.get_sell_signal():
             return False
-        
-        # 쿨다운 시간 체크 (매수 기준)
-        last_buy_time = self.get_last_buy_order_time()
-        if last_buy_time:
-            time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
-            if time_diff < self.cooldown_minutes:
-                remaining_minutes = self.cooldown_minutes - time_diff
-                self.logger.debug(f"매도 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
-                return False
         
         # 보유 주식 확인
         stock_balance = self.get_stock_balance()

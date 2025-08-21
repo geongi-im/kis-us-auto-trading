@@ -216,9 +216,13 @@ class TradingBot:
             return False
         
         # 쿨다운 시간 체크 (한국시간 기준)
-        last_buy_time = self.get_last_buy_order_time()
-        if last_buy_time:
-            time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_buy_time)
+        last_buy_time_str = self.get_last_buy_order_time()
+        if last_buy_time_str:
+            # 오늘 날짜로 datetime 객체 생성 (한국시간)
+            today_kr = DateTimeUtil.get_kr_date_str()  # YYYYMMDD
+            last_buy_datetime = DateTimeUtil.parse_kr_datetime(today_kr, last_buy_time_str)
+            
+            time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_buy_datetime)
             if time_diff < self.cooldown_minutes:
                 remaining_minutes = self.cooldown_minutes - time_diff
                 self.logger.debug(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")

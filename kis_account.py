@@ -365,7 +365,9 @@ class KisAccount(KisBase):
         }
         
         path = "uapi/overseas-stock/v1/trading/inquire-ccnl"
-        result = self.sendRequest("GET", path, tr_id, params=params)
+        # 연속조회인 경우 tr_cont="N" 헤더 추가
+        tr_cont_header = "N" if ctx_area_nk200 else ""
+        result = self.sendRequest("GET", path, tr_id, params=params, tr_cont=tr_cont_header)
 
         # 데이터 추출
         data = result.get('output', [])

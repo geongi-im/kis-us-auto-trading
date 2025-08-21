@@ -28,7 +28,7 @@ class KisBase:
         # 토큰 발급
         self.access_token = getToken()
     
-    def getHeaders(self, tr_id):
+    def getHeaders(self, tr_id, tr_cont=""):
         """공통 헤더 생성"""
         headers = {
             "Content-Type": "application/json",
@@ -38,13 +38,17 @@ class KisBase:
             "tr_id": tr_id
         }
         
+        # 연속조회 헤더 추가 (연속조회 시 "N" 값 설정)
+        if tr_cont:
+            headers["tr_cont"] = tr_cont
+        
         # 분봉 조회 API의 경우 custtype 헤더 추가
         if tr_id == "HHDFS76950200":
             headers["custtype"] = "P"
             
         return headers
     
-    def sendRequest(self, method, path, tr_id, params=None, body=None, retry_count=0):
+    def sendRequest(self, method, path, tr_id, params=None, body=None, retry_count=0, tr_cont=""):
         """API 요청 전송 공통 메서드"""
         import time
         
@@ -52,7 +56,7 @@ class KisBase:
         time.sleep(0.5)
         
         url = f"{self.api_base}/{path}"
-        headers = self.getHeaders(tr_id)
+        headers = self.getHeaders(tr_id, tr_cont)
         
         try:
             if method.upper() == "GET":
@@ -72,7 +76,7 @@ class KisBase:
                     self.access_token = getToken()
                     self.logger.info("토큰 갱신 완료, API 요청을 다시 시도합니다.")
                     # 갱신된 토큰으로 재시도 (1회만)
-                    return self.sendRequest(method, path, tr_id, params, body, retry_count + 1)
+                    return self.sendRequest(method, path, tr_id, params, body, retry_count + 1, tr_cont)
                 except Exception as token_error:
                     self.logger.error(f"토큰 갱신 실패: {token_error}")
                     raise Exception(f"토큰 갱신 실패: {token_error}")

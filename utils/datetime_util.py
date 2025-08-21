@@ -50,9 +50,9 @@ class DateTimeUtil:
             end_time (datetime): 종료 시간 (기본: 현재 미국 시간)
             
         Returns:
-            float: 시간 차이 (분)
+            float: 시간 차이 (분) - 항상 양수
         """
         if end_time is None:
             end_time = cls.get_us_now()
         
-        return (end_time - start_time).total_seconds() / 60
+        return abs((end_time - start_time).total_seconds() / 60)

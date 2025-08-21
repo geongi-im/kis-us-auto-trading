@@ -86,8 +86,7 @@ class RSIStrategy:
                  rsi_oversold: float = 30.0,
                  rsi_overbought: float = 70.0,
                  buy_percentage: float = 0.05,
-                 sell_percentage: float = 0.05,
-                 trading_bot=None):
+                 sell_percentage: float = 0.05):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -103,14 +102,6 @@ class RSIStrategy:
         # 가격 히스토리 및 RSI 계산기
         self.price_history = PriceHistory(max_length=200)
         self.rsi_calculator = RSICalculator(period=rsi_period)
-        
-        # 마지막 매수/매도 시간 추적 (5분 쿨다운)
-        self.last_buy_time = None
-        self.last_sell_time = None
-        self.cooldown_minutes = 5
-        
-        # TradingBot 참조 (쿨다운 체크용)
-        self.trading_bot = trading_bot
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
@@ -204,56 +195,23 @@ class RSIStrategy:
         prices = self.price_history.get_prices()
         return self.rsi_calculator.calculate_rsi(prices)
     
-    def should_buy(self):
-        """매수 신호 판단"""
-        # 실제 주문 기록 기반 쿨다운 체크
-        if self.trading_bot:
-            last_buy_time = self.trading_bot.get_last_buy_order_time()
-            if last_buy_time:
-                from utils.datetime_util import DateTimeUtil
-                time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
-                if time_diff < self.trading_bot.cooldown_minutes:
-                    return False
-        
+    def get_buy_signal(self):
+        """순수 RSI 기반 매수 신호 판단"""
         rsi = self.get_current_rsi()
         if rsi is None:
             return False
         
         return rsi <= self.rsi_oversold
     
-    def should_sell(self):
-        """매도 신호 판단"""
-        # 실제 주문 기록 기반 쿨다운 체크 (매도는 매수 기준으로 체크)
-        if self.trading_bot:
-            last_buy_time = self.trading_bot.get_last_buy_order_time()
-            if last_buy_time:
-                from utils.datetime_util import DateTimeUtil
-                time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
-                if time_diff < self.trading_bot.cooldown_minutes:
-                    return False
-        
+    def get_sell_signal(self):
+        """순수 RSI 기반 매도 신호 판단"""
         rsi = self.get_current_rsi()
         if rsi is None:
             return False
         
         return rsi >= self.rsi_overbought
     
-    def _is_in_cooldown(self, last_time):
-        """쿨다운 시간 체크"""
-        if last_time is None:
-            return False
-        
-        return datetime.now() - last_time < timedelta(minutes=self.cooldown_minutes)
     
-    def execute_buy(self):
-        """매수 실행 기록"""
-        self.last_buy_time = datetime.now()
-        return True
-    
-    def execute_sell(self):
-        """매도 실행 기록"""
-        self.last_sell_time = datetime.now()
-        return True
     
     def get_strategy_status(self):
         """전략 현재 상태 반환"""
@@ -266,10 +224,8 @@ class RSIStrategy:
             "current_price": current_price,
             "current_rsi": rsi,
             "data_length": self.price_history.get_length(),
-            "last_buy_time": self.last_buy_time,
-            "last_sell_time": self.last_sell_time,
-            "buy_signal": self.should_buy(),
-            "sell_signal": self.should_sell(),
+            "buy_signal": self.get_buy_signal(),
+            "sell_signal": self.get_sell_signal(),
             "rsi_oversold": self.rsi_oversold,
             "rsi_overbought": self.rsi_overbought
         }

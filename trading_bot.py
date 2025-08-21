@@ -38,7 +38,7 @@ class TradingBot:
         rsi_overbought = int(os.getenv("RSI_OVERBOUGHT"))
         
         # RSI 전략
-        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought, trading_bot=self)
+        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought)
         
         # 텔레그램 유틸
         self.telegram = TelegramUtil()
@@ -204,15 +204,57 @@ class TradingBot:
             self.logger.error(f"마지막 매수 주문 시간 조회 중 오류: {e}")
             
         return None
+    
+    def should_buy(self, current_price: float):
+        """매수 신호 종합 판단 (RSI + 쿨다운 + 계좌 조건)"""
+        # RSI 신호 확인
+        if not self.strategy.get_buy_signal():
+            return False
+        
+        # 쿨다운 시간 체크
+        last_buy_time = self.get_last_buy_order_time()
+        if last_buy_time:
+            time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
+            if time_diff < self.cooldown_minutes:
+                remaining_minutes = self.cooldown_minutes - time_diff
+                self.logger.debug(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+                return False
+        
+        # 계좌 잔고 확인
+        cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
+        if cash_balance < current_price:
+            self.logger.debug(f"매수 불가: 현금 부족 (${cash_balance:.2f})")
+            return False
+        
+        return True
+    
+    def should_sell(self):
+        """매도 신호 종합 판단 (RSI + 쿨다운 + 보유 주식 조건)"""
+        # RSI 신호 확인
+        if not self.strategy.get_sell_signal():
+            return False
+        
+        # 쿨다운 시간 체크 (매수 기준)
+        last_buy_time = self.get_last_buy_order_time()
+        if last_buy_time:
+            time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
+            if time_diff < self.cooldown_minutes:
+                remaining_minutes = self.cooldown_minutes - time_diff
+                self.logger.debug(f"매도 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+                return False
+        
+        # 보유 주식 확인
+        stock_balance = self.get_stock_balance()
+        if stock_balance['quantity'] == 0:
+            self.logger.debug("매도 불가: 보유 주식 없음")
+            return False
+        
+        return True
 
     def execute_buy_order(self, current_price: float):
         """매수 주문 실행"""
         try:
             cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
-            if cash_balance < current_price:
-                self.logger.warning(f"매수 불가: 현금 부족 (${cash_balance:.2f})")
-                return False
-            
             quantity = self.calculate_buy_quantity(cash_balance, current_price)
             
             # 매수 주문 실행
@@ -225,7 +267,6 @@ class TradingBot:
             )
             
             if result:
-                self.strategy.execute_buy()
                 self.total_trades += 1
                 
                 # 텔레그램 알림
@@ -268,7 +309,6 @@ RSI: {rsi:.1f}
             )
             
             if result:
-                self.strategy.execute_sell()
                 self.total_trades += 1
                 
                 # 텔레그램 알림
@@ -307,12 +347,12 @@ RSI: {rsi:.1f}
         self.logger.info(f"{self.symbol} 현재가: ${current_price:.2f}, RSI: {rsi:.1f}")
         
         # 매수 신호 확인
-        if self.strategy.should_buy():
+        if self.should_buy(current_price):
             self.logger.info(f"매수 신호 감지! RSI: {rsi:.1f}")
             self.execute_buy_order(current_price)
         
         # 매도 신호 확인
-        elif self.strategy.should_sell():
+        elif self.should_sell():
             self.logger.info(f"매도 신호 감지! RSI: {rsi:.1f}")
             self.execute_sell_order(current_price)
     

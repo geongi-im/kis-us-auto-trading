@@ -17,9 +17,7 @@ class TradingBot:
     
     def __init__(self, 
                  symbol: str = "TQQQ",
-                 market: str = "NASD",
-                 check_interval_minutes: int = None,
-                 cooldown_minutes: int = None):
+                 market: str = "NASD"):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -27,9 +25,9 @@ class TradingBot:
         self.symbol = symbol
         self.market = market
         
-        # 환경변수에서 체크 간격 및 쿨다운 시간 가져오기
-        self.check_interval_minutes = check_interval_minutes if check_interval_minutes is not None else int(os.getenv("CHECK_INTERVAL_MINUTES", "5"))
-        self.cooldown_minutes = cooldown_minutes if cooldown_minutes is not None else int(os.getenv("COOLDOWN_MINUTES", "30"))
+        # 환경변수에서 체크 간격 및 쿨다운 시간 가져오기 (main에서 이미 체크했으므로 반드시 존재)
+        self.check_interval_minutes = int(os.getenv("CHECK_INTERVAL_MINUTES"))
+        self.cooldown_minutes = int(os.getenv("COOLDOWN_MINUTES"))
         
         # KIS API 객체들
         self.kis_order = KisOrder()

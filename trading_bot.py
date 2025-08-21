@@ -187,13 +187,16 @@ class TradingBot:
             if not order_history:
                 return None
             
-            # 매수 주문만 필터링하고 시간순 정렬 (최신순)
+            # 매수 주문만 필터링
             buy_orders = [order for order in order_history if order.get('sll_buy_dvsn_cd') == '02']
             if not buy_orders:
                 return None
             
+            # ord_dt와 ord_tmd 기준으로 내림차순 정렬 (최신순)
+            buy_orders.sort(key=lambda x: (x.get('ord_dt', ''), x.get('ord_tmd', '')), reverse=True)
+            
             # 가장 최신 매수 주문의 시간 반환 (미국 현지시간)
-            latest_order = buy_orders[0]  # 이미 정렬되어 있음 (DS: 최신순)
+            latest_order = buy_orders[0]
             order_date = latest_order.get('ord_dt', '')  # YYYYMMDD
             order_time = latest_order.get('ord_tmd', '')  # HHMMSS
             

@@ -174,7 +174,7 @@ class TradingBot:
         """가장 마지막 매수 주문 시간 조회 (한국시간)"""
         try:
             # 한국시간 기준 오늘과 내일 날짜
-            start_date = DateTimeUtil.get_kr_date_str(offset=0)  # 오늘
+            start_date = DateTimeUtil.get_kr_date_str(offset=-1)  # 오늘
             end_date = DateTimeUtil.get_kr_date_str(offset=1)    # 내일
             
             # 주문내역 조회 (한국시간 기준)
@@ -194,13 +194,13 @@ class TradingBot:
             if not buy_orders:
                 return None
             
-            # ord_dt와 ord_tmd 기준으로 내림차순 정렬 (최신순)
-            buy_orders.sort(key=lambda x: (x.get('ord_dt', ''), x.get('ord_tmd', '')), reverse=True)
+            # odno 주문번호 기준 내림차순 (최신순)
+            buy_orders.sort(key=lambda x: (x.get('odno', '')), reverse=True)
             
-            # 가장 최신 매수 주문의 시간 반환 (한국시간)
+            # 가장 최신 매수 주문의 order_time만 사용하여 한국시간으로 반환
             latest_order = buy_orders[0]
             order_date = latest_order.get('ord_dt', '')  # YYYYMMDD
-            order_time = latest_order.get('ord_tmd', '')  # HHMMSS
+            order_time = latest_order.get('ord_tmd', '')  # HHMMSS (한국시간 기준)
             
             if order_date and order_time:
                 return DateTimeUtil.parse_kr_datetime(order_date, order_time)

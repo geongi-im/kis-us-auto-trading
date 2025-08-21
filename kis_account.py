@@ -294,7 +294,8 @@ class KisAccount(KisBase):
             symbol = ""           # 모의투자는 ""만 가능
             order_div = "00"      # 모의투자는 00만 가능
             settle_div = "00"     # 모의투자는 00만 가능  
-            market = ""           # 모의투자는 ""만 가능
+            market = "%"           # 모의투자는 "%"만 가능
+            sort = "DS"           # 모의투자는 DS(정순)만 가능
         
         # 실전/모의투자 tr_id 구분
         tr_id = "TTTS3035R" if not self.is_virtual else "VTTS3035R"
@@ -314,7 +315,7 @@ class KisAccount(KisBase):
                 "SLL_BUY_DVSN": order_div,          # 매도매수구분
                 "CCLD_NCCS_DVSN": settle_div,       # 체결미체결구분
                 "OVRS_EXCG_CD": market,             # 해외거래소코드
-                "SORT_SQN": "DS",                   # DS:정순 (모의계좌는 DS만 가능)
+                "SORT_SQN": sort,                   # DS:정순 (모의계좌는 DS만 가능)
                 "ORD_DT": "",                       # 주문일자 (공백)
                 "ORD_GNO_BRNO": "",                 # 주문채번지점번호 (공백)
                 "ODNO": "",                         # 주문번호 (공백)
@@ -323,21 +324,17 @@ class KisAccount(KisBase):
             }
             
             path = "uapi/overseas-stock/v1/trading/inquire-ccnl"
-            result = self.sendRequest("GET", path, tr_id, tr_cont, params=params)
-            
+            result = self.sendRequest("GET", path, tr_id, params=params)
+
             # 현재 페이지 데이터 추가
             current_data = result.get('output', [])
             if current_data:
                 all_data.extend(current_data)
             
-            # 연속조회 확인
-            tr_cont = result.get('tr_cont', '')
-            if tr_cont in ["D", "E"]:  # 마지막 페이지
-                break
-            elif tr_cont in ["F", "M"]:  # 다음 페이지 존재
+            # 연속조회 확인 - ctx_area_nk200가 있으면 연속조회
+            ctx_area_nk200 = result.get('ctx_area_nk200', '').strip()
+            if ctx_area_nk200:  # 연속조회키가 있으면 계속 조회
                 ctx_area_fk200 = result.get('ctx_area_fk200', '')
-                ctx_area_nk200 = result.get('ctx_area_nk200', '')
-                tr_cont = "N"  # 연속조회 플래그 설정
                 
                 # API 호출 제한을 위한 지연
                 import time

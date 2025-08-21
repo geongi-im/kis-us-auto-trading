@@ -49,7 +49,7 @@ class KisBase:
         import time
         
         # API 요청 빈도 제한 (0.1초 대기)
-        time.sleep(0.1)
+        time.sleep(0.5)
         
         url = f"{self.api_base}/{path}"
         headers = self.getHeaders(tr_id)

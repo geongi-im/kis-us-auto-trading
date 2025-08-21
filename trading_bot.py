@@ -258,7 +258,7 @@ RSI: {rsi:.1f}
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
 
-        result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ")
+        result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ", start_date="20250820", end_date="20250821")
         print(result)
 
         # 해외주식 매수가능금액 조회

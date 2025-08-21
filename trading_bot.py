@@ -197,13 +197,12 @@ class TradingBot:
             # odno 주문번호 기준 내림차순 (최신순)
             buy_orders.sort(key=lambda x: (x.get('odno', '')), reverse=True)
             
-            # 가장 최신 매수 주문의 order_time만 사용하여 한국시간으로 반환
+            # 가장 최신 매수 주문의 order_time만 반환 (한국시간 기준)
             latest_order = buy_orders[0]
-            order_date = latest_order.get('ord_dt', '')  # YYYYMMDD
             order_time = latest_order.get('ord_tmd', '')  # HHMMSS (한국시간 기준)
             
-            if order_date and order_time:
-                return DateTimeUtil.parse_kr_datetime(order_date, order_time)
+            if order_time:
+                return order_time
                 
         except Exception as e:
             self.logger.error(f"마지막 매수 주문 시간 조회 중 오류: {e}")

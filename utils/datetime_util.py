@@ -23,9 +23,17 @@ class DateTimeUtil:
         return cls.get_us_now().strftime(date_format)
     
     @classmethod
-    def get_kr_date_str(cls, date_format="%Y%m%d"):
-        """현재 한국시간의 날짜 문자열 반환 (기본: YYYYMMDD)"""
-        return datetime.now(cls.KR_TIMEZONE).strftime(date_format)
+    def get_kr_date_str(cls, date_format="%Y%m%d", offset=0):
+        """한국시간 기준 날짜 문자열 반환 (기본: YYYYMMDD)
+        
+        Args:
+            date_format (str): 날짜 형식 (기본: %Y%m%d)
+            offset (int): 날짜 오프셋 (기본: 0=오늘, 1=내일, -1=어제)
+        """
+        from datetime import timedelta
+        
+        kr_date = datetime.now(cls.KR_TIMEZONE) + timedelta(days=offset)
+        return kr_date.strftime(date_format)
     
     @classmethod
     def get_us_datetime_str(cls, datetime_format="%Y%m%d%H%M%S"):
@@ -94,20 +102,3 @@ class DateTimeUtil:
         
         return abs((end_time - start_time).total_seconds() / 60)
     
-    @classmethod
-    def get_kr_date_range_str(cls, days_offset=1):
-        """한국시간 기준 날짜 범위 문자열 반환
-        
-        Args:
-            days_offset (int): 시작일부터 몇 일 후까지 (기본값: 1일 후)
-            
-        Returns:
-            tuple: (start_date_str, end_date_str)
-        """
-        from datetime import timedelta
-        
-        kr_now = datetime.now(cls.KR_TIMEZONE)
-        start_date = kr_now.strftime("%Y%m%d")
-        end_date = (kr_now + timedelta(days=days_offset)).strftime("%Y%m%d")
-        
-        return start_date, end_date

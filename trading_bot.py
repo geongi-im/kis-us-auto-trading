@@ -1,5 +1,6 @@
 import asyncio
 import traceback
+import pytz
 from datetime import datetime, time
 from typing import Optional, Dict
 from kis_order import KisOrder
@@ -15,7 +16,8 @@ class TradingBot:
     def __init__(self, 
                  symbol: str = "TQQQ",
                  market: str = "NASD",
-                 check_interval_minutes: int = 5):
+                 check_interval_minutes: int = 5,
+                 cooldown_minutes: int = 30):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -23,6 +25,7 @@ class TradingBot:
         self.symbol = symbol
         self.market = market
         self.check_interval_minutes = check_interval_minutes
+        self.cooldown_minutes = cooldown_minutes
         
         # KIS API 객체들
         self.kis_order = KisOrder()
@@ -138,9 +141,61 @@ class TradingBot:
         sell_quantity = int(total_quantity * self.strategy.sell_percentage)
         return max(1, min(sell_quantity, total_quantity))  # 최소 1주, 최대 보유량
     
-    def execute_buy_order(self, current_price: float):
-        """매수 주문 실행"""
+    def get_last_buy_order_time(self):
+        """가장 마지막 매수 주문 시간 조회 (미국 현지시간)"""
         try:
+            us_timezone = pytz.timezone('America/New_York')
+            us_now = datetime.now(us_timezone)
+            today_str = us_now.strftime("%Y%m%d")
+            
+            # 오늘 날짜의 주문내역 조회
+            order_history = self.kis_account.getOverseasOrderHistory(
+                symbol=self.symbol, 
+                start_date=today_str, 
+                end_date=today_str, 
+                order_div="02",  # 매수만
+                fetch_all=True
+            )
+            
+            if not order_history:
+                return None
+            
+            # 매수 주문만 필터링하고 시간순 정렬 (최신순)
+            buy_orders = [order for order in order_history if order.get('sll_buy_dvsn_cd') == '02']
+            if not buy_orders:
+                return None
+            
+            # 가장 최신 매수 주문의 시간 반환 (미국 현지시간)
+            latest_order = buy_orders[0]  # 이미 정렬되어 있음 (DS: 최신순)
+            order_date = latest_order.get('ord_dt', '')  # YYYYMMDD
+            order_time = latest_order.get('ord_tmd', '')  # HHMMSS
+            
+            if order_date and order_time:
+                # 미국 현지시간으로 파싱
+                order_datetime_str = f"{order_date}{order_time}"
+                order_datetime = datetime.strptime(order_datetime_str, "%Y%m%d%H%M%S")
+                order_datetime_us = us_timezone.localize(order_datetime)
+                return order_datetime_us
+                
+        except Exception as e:
+            self.logger.error(f"마지막 매수 주문 시간 조회 중 오류: {e}")
+            
+        return None
+
+    def execute_buy_order(self, current_price: float):
+        """매수 주문 실행 (쿨다운 시간 체크 포함)"""
+        try:
+            # 쿨다운 시간 체크
+            last_buy_time = self.get_last_buy_order_time()
+            if last_buy_time:
+                us_timezone = pytz.timezone('America/New_York')
+                current_us_time = datetime.now(us_timezone)
+                time_diff = (current_us_time - last_buy_time).total_seconds() / 60  # 분 단위
+                
+                if time_diff < self.cooldown_minutes:
+                    remaining_minutes = self.cooldown_minutes - time_diff
+                    self.logger.info(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+                    return False
             cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
             if cash_balance < current_price:
                 self.logger.warning(f"매수 불가: 현금 부족 (${cash_balance:.2f})")

@@ -304,8 +304,10 @@ class KisAccount(KisBase):
         tr_cont = ""
         ctx_area_fk200 = ""
         ctx_area_nk200 = ""
+        page_count = 0
         
         while True:
+            page_count += 1
             params = {
                 "CANO": self.cano,
                 "ACNT_PRDT_CD": self.acnt_prdt_cd,
@@ -330,16 +332,21 @@ class KisAccount(KisBase):
             current_data = result.get('output', [])
             if current_data:
                 all_data.extend(current_data)
+                self.logger.info(f"해외주식 주문내역 조회 {page_count}페이지: {len(current_data)}건 조회")
+            else:
+                self.logger.info(f"해외주식 주문내역 조회 {page_count}페이지: 데이터 없음")
             
             # 연속조회 확인 - ctx_area_nk200가 있으면 연속조회
             ctx_area_nk200 = result.get('ctx_area_nk200', '').strip()
             if ctx_area_nk200:  # 연속조회키가 있으면 계속 조회
                 ctx_area_fk200 = result.get('ctx_area_fk200', '')
+                self.logger.info(f"연속조회키 발견, 다음 페이지 조회 중... (키: {ctx_area_nk200[:20]}...)")
                 
                 # API 호출 제한을 위한 지연
                 import time
-                time.sleep(0.1)
+                time.sleep(0.3)
             else:
                 break
-                
+        
+        self.logger.info(f"해외주식 주문내역 조회 완료: 총 {len(all_data)}건, {page_count}페이지")
         return all_data

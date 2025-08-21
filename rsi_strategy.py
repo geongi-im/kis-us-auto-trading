@@ -86,7 +86,8 @@ class RSIStrategy:
                  rsi_oversold: float = 30.0,
                  rsi_overbought: float = 70.0,
                  buy_percentage: float = 0.05,
-                 sell_percentage: float = 0.05):
+                 sell_percentage: float = 0.05,
+                 trading_bot=None):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -107,6 +108,9 @@ class RSIStrategy:
         self.last_buy_time = None
         self.last_sell_time = None
         self.cooldown_minutes = 5
+        
+        # TradingBot 참조 (쿨다운 체크용)
+        self.trading_bot = trading_bot
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
@@ -202,9 +206,14 @@ class RSIStrategy:
     
     def should_buy(self):
         """매수 신호 판단"""
-        # 쿨다운 체크
-        if self._is_in_cooldown(self.last_buy_time):
-            return False
+        # 실제 주문 기록 기반 쿨다운 체크
+        if self.trading_bot:
+            last_buy_time = self.trading_bot.get_last_buy_order_time()
+            if last_buy_time:
+                from utils.datetime_util import DateTimeUtil
+                time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
+                if time_diff < self.trading_bot.cooldown_minutes:
+                    return False
         
         rsi = self.get_current_rsi()
         if rsi is None:
@@ -214,9 +223,14 @@ class RSIStrategy:
     
     def should_sell(self):
         """매도 신호 판단"""
-        # 쿨다운 체크
-        if self._is_in_cooldown(self.last_sell_time):
-            return False
+        # 실제 주문 기록 기반 쿨다운 체크 (매도는 매수 기준으로 체크)
+        if self.trading_bot:
+            last_buy_time = self.trading_bot.get_last_buy_order_time()
+            if last_buy_time:
+                from utils.datetime_util import DateTimeUtil
+                time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
+                if time_diff < self.trading_bot.cooldown_minutes:
+                    return False
         
         rsi = self.get_current_rsi()
         if rsi is None:

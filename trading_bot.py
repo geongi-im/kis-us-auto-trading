@@ -38,7 +38,7 @@ class TradingBot:
         rsi_overbought = int(os.getenv("RSI_OVERBOUGHT"))
         
         # RSI 전략
-        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought)
+        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought, trading_bot=self)
         
         # 텔레그램 유틸
         self.telegram = TelegramUtil()
@@ -206,17 +206,8 @@ class TradingBot:
         return None
 
     def execute_buy_order(self, current_price: float):
-        """매수 주문 실행 (쿨다운 시간 체크 포함)"""
+        """매수 주문 실행"""
         try:
-            # 쿨다운 시간 체크
-            last_buy_time = self.get_last_buy_order_time()
-            if last_buy_time:
-                time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
-                
-                if time_diff < self.cooldown_minutes:
-                    remaining_minutes = self.cooldown_minutes - time_diff
-                    self.logger.info(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
-                    return False
             cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
             if cash_balance < current_price:
                 self.logger.warning(f"매수 불가: 현금 부족 (${cash_balance:.2f})")

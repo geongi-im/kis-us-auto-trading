@@ -1,5 +1,6 @@
 import asyncio
 import os
+import pytz
 import traceback
 from datetime import datetime, time
 from typing import Optional, Dict
@@ -48,44 +49,57 @@ class TradingBot:
         self.start_time = None
         
         # 환경변수에서 시간 설정 가져오기
-        market_start = os.getenv("MARKET_START_TIME", "22:30")
-        market_end = os.getenv("MARKET_END_TIME", "05:00") 
-        auto_shutdown = os.getenv("AUTO_SHUTDOWN_TIME", "05:30")
+        market_start = os.getenv("MARKET_START_TIME", "23:00")
+        market_end = os.getenv("MARKET_END_TIME", "04:00") 
+        auto_shutdown = os.getenv("AUTO_SHUTDOWN_TIME", "05:00")
         
         # 시간 파싱 (HH:MM 형식)
         start_hour, start_min = map(int, market_start.split(":"))
         end_hour, end_min = map(int, market_end.split(":"))
         shutdown_hour, shutdown_min = map(int, auto_shutdown.split(":"))
         
-        # 미국 장시간 (한국시간 기준)
+        # 미국 장시간 (미국 현지시간 기준)
         self.market_start_time = time(start_hour, start_min)
         self.market_end_time = time(end_hour, end_min)
         
-        # 자동 종료 시간 (한국시간 기준)  
+        # 자동 종료 시간 (미국 현지시간 기준)  
         self.auto_shutdown_time = time(shutdown_hour, shutdown_min)
     
     def is_market_hours(self):
-        """현재 시간이 미국 장시간인지 확인"""
-        now = datetime.now().time()
-        # 23:00 ~ 23:59 또는 00:00 ~ 04:00
-        return (now >= self.market_start_time or now <= self.market_end_time)
+        """현재 시간이 미국 장시간인지 확인 (미국 현지시간 기준)"""
+        us_now = DateTimeUtil.get_us_now().time()
+        
+        # 미국 시간 기준으로 장시간 체크
+        if self.market_start_time <= self.market_end_time:
+            # 같은 날 (예: 09:30 ~ 16:00)
+            return self.market_start_time <= us_now <= self.market_end_time
+        else:
+            # 자정을 넘나드는 경우 (예: 23:00 ~ 04:00)  
+            return us_now >= self.market_start_time or us_now <= self.market_end_time
     
     def should_shutdown(self):
-        """자동 종료 시간인지 확인 (다음날 5시)"""
-        now = datetime.now()
-        current_time = now.time()
+        """자동 종료 시간인지 확인 (미국 현지시간 기준)"""
+        us_now = DateTimeUtil.get_us_now()
+        us_current_time = us_now.time()
         
-        # 프로그램 시작 후 다음날 5시까지만 실행
-        # 5시~22시59분 사이에는 종료하지 않음 (아직 다음날 5시가 아님)
-        if time(5, 0) <= current_time < time(23, 0):
-            return False
+        # 미국 시간 기준으로 자동 종료 시간 체크
+        if us_current_time >= self.auto_shutdown_time:
+            return True
         
-        # 23시 이후이거나 0시~4시59분 사이라면
-        # 시작 시간을 기준으로 24시간이 지났는지 확인
+        # 추가적으로 시작 시간 기준 최대 실행 시간 체크 (8시간)
         if self.start_time:
-            elapsed_hours = (now - self.start_time).total_seconds() / 3600
-            # 7시간 이상 실행되었고 현재 시간이 5시 이후라면 종료
-            return elapsed_hours >= 7 and current_time >= self.auto_shutdown_time
+            # start_time을 미국 시간으로 변환해서 비교
+            if hasattr(self.start_time, 'astimezone'):
+                # 이미 timezone aware한 경우
+                start_time_us = self.start_time.astimezone(DateTimeUtil.US_TIMEZONE)
+            else:
+                # naive datetime인 경우 한국시간으로 가정하고 변환
+                korea_tz = pytz.timezone('Asia/Seoul')
+                start_time_korea = korea_tz.localize(self.start_time)
+                start_time_us = start_time_korea.astimezone(DateTimeUtil.US_TIMEZONE)
+            
+            elapsed_hours = (us_now - start_time_us).total_seconds() / 3600
+            return elapsed_hours >= 8
         
         return False
     
@@ -314,7 +328,7 @@ RSI: {rsi:.1f}
     async def start_trading(self):
         """매매 봇 시작"""
         self.is_running = True
-        self.start_time = datetime.now()
+        self.start_time = DateTimeUtil.get_us_now()
         
         self.logger.info(f"RSI 자동매매 봇 시작: {self.symbol}")
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
@@ -390,7 +404,7 @@ RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
         self.is_running = False
         
         if self.start_time:
-            runtime = datetime.now() - self.start_time
+            runtime = DateTimeUtil.get_us_now() - self.start_time
             self.logger.info(f"봇 운영시간: {str(runtime).split('.')[0]}")
             self.logger.info(f"총 거래횟수: {self.total_trades}")
         

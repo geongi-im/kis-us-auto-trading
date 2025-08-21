@@ -13,7 +13,8 @@ load_dotenv()
 def checkEnvVariables():
     """필수 환경변수 체크"""
     required_vars = ['APP_KEY', 'APP_SECRET', 'ACCOUNT_NO', 'IS_VIRTUAL', 
-                     'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID']
+                     'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'MARKET_START_TIME', 
+                     'MARKET_END_TIME', 'AUTO_SHUTDOWN_TIME', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT']
     missing_vars = [var for var in required_vars if os.getenv(var) is None]
     
     if missing_vars:

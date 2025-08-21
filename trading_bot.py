@@ -1,4 +1,5 @@
 import asyncio
+import os
 import traceback
 from datetime import datetime, time
 from typing import Optional, Dict
@@ -31,8 +32,12 @@ class TradingBot:
         self.kis_order = KisOrder()
         self.kis_account = KisAccount()
         
+        # 환경변수에서 RSI 설정 가져오기
+        rsi_oversold = int(os.getenv("RSI_OVERSOLD", "30"))
+        rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", "70"))
+        
         # RSI 전략
-        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=60)
+        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought)
         
         # 텔레그램 유틸
         self.telegram = TelegramUtil()
@@ -42,12 +47,22 @@ class TradingBot:
         self.total_trades = 0
         self.start_time = None
         
-        # 미국 장시간 (한국시간 기준)
-        self.market_start_time = time(23, 0)  # 23:00
-        self.market_end_time = time(4, 0)     # 04:00 (다음날)
+        # 환경변수에서 시간 설정 가져오기
+        market_start = os.getenv("MARKET_START_TIME", "22:30")
+        market_end = os.getenv("MARKET_END_TIME", "05:00") 
+        auto_shutdown = os.getenv("AUTO_SHUTDOWN_TIME", "05:30")
         
-        # 자동 종료 시간 (한국시간 기준)
-        self.auto_shutdown_time = time(5, 0)  # 05:00 (장 마감 1시간 후)
+        # 시간 파싱 (HH:MM 형식)
+        start_hour, start_min = map(int, market_start.split(":"))
+        end_hour, end_min = map(int, market_end.split(":"))
+        shutdown_hour, shutdown_min = map(int, auto_shutdown.split(":"))
+        
+        # 미국 장시간 (한국시간 기준)
+        self.market_start_time = time(start_hour, start_min)
+        self.market_end_time = time(end_hour, end_min)
+        
+        # 자동 종료 시간 (한국시간 기준)  
+        self.auto_shutdown_time = time(shutdown_hour, shutdown_min)
     
     def is_market_hours(self):
         """현재 시간이 미국 장시간인지 확인"""
@@ -305,8 +320,8 @@ RSI: {rsi:.1f}
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
 
-        result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ", start_date="20250820", end_date="20250821", fetch_all=True)
-        print(result)
+        # result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ", start_date="20250820", end_date="20250821", fetch_all=True)
+        # print(result)
 
         # 해외주식 매수가능금액 조회
         # purchase_amount = self.kis_account.getOverseasPurchaseAmount(market="NASD", price="90.4200", symbol="TQQQ")

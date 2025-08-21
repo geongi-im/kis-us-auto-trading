@@ -18,24 +18,26 @@ class TradingBot:
     def __init__(self, 
                  symbol: str = "TQQQ",
                  market: str = "NASD",
-                 check_interval_minutes: int = 5,
-                 cooldown_minutes: int = 30):
+                 check_interval_minutes: int = None,
+                 cooldown_minutes: int = None):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
         
         self.symbol = symbol
         self.market = market
-        self.check_interval_minutes = check_interval_minutes
-        self.cooldown_minutes = cooldown_minutes
+        
+        # 환경변수에서 체크 간격 및 쿨다운 시간 가져오기
+        self.check_interval_minutes = check_interval_minutes if check_interval_minutes is not None else int(os.getenv("CHECK_INTERVAL_MINUTES", "5"))
+        self.cooldown_minutes = cooldown_minutes if cooldown_minutes is not None else int(os.getenv("COOLDOWN_MINUTES", "30"))
         
         # KIS API 객체들
         self.kis_order = KisOrder()
         self.kis_account = KisAccount()
         
         # 환경변수에서 RSI 설정 가져오기
-        rsi_oversold = int(os.getenv("RSI_OVERSOLD", "30"))
-        rsi_overbought = int(os.getenv("RSI_OVERBOUGHT", "70"))
+        rsi_oversold = int(os.getenv("RSI_OVERSOLD"))
+        rsi_overbought = int(os.getenv("RSI_OVERBOUGHT"))
         
         # RSI 전략
         self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought)
@@ -49,9 +51,9 @@ class TradingBot:
         self.start_time = None
         
         # 환경변수에서 시간 설정 가져오기
-        market_start = os.getenv("MARKET_START_TIME", "23:00")
-        market_end = os.getenv("MARKET_END_TIME", "04:00") 
-        auto_shutdown = os.getenv("AUTO_SHUTDOWN_TIME", "05:00")
+        market_start = os.getenv("MARKET_START_TIME")
+        market_end = os.getenv("MARKET_END_TIME") 
+        auto_shutdown = os.getenv("AUTO_SHUTDOWN_TIME")
         
         # 시간 파싱 (HH:MM 형식)
         start_hour, start_min = map(int, market_start.split(":"))
@@ -363,7 +365,7 @@ RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
             while self.is_running:
                 # 자동 종료 시간 체크
                 if self.should_shutdown():
-                    self.logger.info("자동 종료 시간(05:00)에 도달했습니다. 프로그램을 종료합니다.")
+                    self.logger.info("자동 종료 시간에 도달했습니다. 프로그램을 종료합니다.")
                     break
                 
                 # 장시간 체크

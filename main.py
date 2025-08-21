@@ -14,7 +14,8 @@ def checkEnvVariables():
     """필수 환경변수 체크"""
     required_vars = ['APP_KEY', 'APP_SECRET', 'ACCOUNT_NO', 'IS_VIRTUAL', 
                      'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'MARKET_START_TIME', 
-                     'MARKET_END_TIME', 'AUTO_SHUTDOWN_TIME', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT']
+                     'MARKET_END_TIME', 'AUTO_SHUTDOWN_TIME', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT',
+                     'COOLDOWN_MINUTES', 'CHECK_INTERVAL_MINUTES']
     missing_vars = [var for var in required_vars if os.getenv(var) is None]
     
     if missing_vars:
@@ -53,11 +54,10 @@ async def main_async():
     # RSI 자동매매 봇 시작
     logger.info("RSI 기반 자동매매 봇을 시작합니다...")
     
-    # 매매 봇 생성 및 시작 (테스트용 1분 간격)
+    # 매매 봇 생성 및 시작
     trading_bot = TradingBot(
         symbol="TQQQ",
-        market="NASD",
-        check_interval_minutes=1
+        market="NASD"
     )
     
     await trading_bot.start_trading()

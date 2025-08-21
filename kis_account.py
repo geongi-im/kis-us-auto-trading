@@ -1,6 +1,6 @@
 from kis_base import KisBase
 from datetime import datetime, timedelta
-import pytz
+from utils.datetime_util import DateTimeUtil
 
 class KisAccount(KisBase):
     """계좌 관련 API"""
@@ -282,17 +282,11 @@ class KisAccount(KisBase):
             fetch_all=False: dict {'data': 주문체결내역 리스트, 'ctx_area_fk200': 연속조회키1, 'ctx_area_nk200': 연속조회키2, 'has_more': 추가데이터여부}
             fetch_all=True: list 모든 주문체결내역 리스트 (연속조회 자동 처리)
         """
-        # 미국 현지시간 기준으로 날짜 설정
-        def get_us_date():
-            us_timezone = pytz.timezone('America/New_York')
-            us_now = datetime.now(us_timezone)
-            return us_now.strftime("%Y%m%d")
-        
         # 시작/종료일이 없으면 미국 현지시간 기준 오늘 날짜로 설정
         if not start_date:
-            start_date = get_us_date()
+            start_date = DateTimeUtil.get_us_date_str()
         if not end_date:
-            end_date = get_us_date()
+            end_date = DateTimeUtil.get_us_date_str()
         
         # 모의투자 제약사항 적용
         if self.is_virtual:

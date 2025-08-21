@@ -1,6 +1,5 @@
 import asyncio
 import traceback
-import pytz
 from datetime import datetime, time
 from typing import Optional, Dict
 from kis_order import KisOrder
@@ -8,6 +7,7 @@ from kis_account import KisAccount
 from rsi_strategy import RSIStrategy
 from utils.telegram_util import TelegramUtil
 from utils.logger_util import LoggerUtil
+from utils.datetime_util import DateTimeUtil
 
 
 class TradingBot:
@@ -144,9 +144,7 @@ class TradingBot:
     def get_last_buy_order_time(self):
         """가장 마지막 매수 주문 시간 조회 (미국 현지시간)"""
         try:
-            us_timezone = pytz.timezone('America/New_York')
-            us_now = datetime.now(us_timezone)
-            today_str = us_now.strftime("%Y%m%d")
+            today_str = DateTimeUtil.get_us_date_str()
             
             # 오늘 날짜의 주문내역 조회
             order_history = self.kis_account.getOverseasOrderHistory(
@@ -171,11 +169,7 @@ class TradingBot:
             order_time = latest_order.get('ord_tmd', '')  # HHMMSS
             
             if order_date and order_time:
-                # 미국 현지시간으로 파싱
-                order_datetime_str = f"{order_date}{order_time}"
-                order_datetime = datetime.strptime(order_datetime_str, "%Y%m%d%H%M%S")
-                order_datetime_us = us_timezone.localize(order_datetime)
-                return order_datetime_us
+                return DateTimeUtil.parse_us_datetime(order_date, order_time)
                 
         except Exception as e:
             self.logger.error(f"마지막 매수 주문 시간 조회 중 오류: {e}")
@@ -188,9 +182,7 @@ class TradingBot:
             # 쿨다운 시간 체크
             last_buy_time = self.get_last_buy_order_time()
             if last_buy_time:
-                us_timezone = pytz.timezone('America/New_York')
-                current_us_time = datetime.now(us_timezone)
-                time_diff = (current_us_time - last_buy_time).total_seconds() / 60  # 분 단위
+                time_diff = DateTimeUtil.get_time_diff_minutes(last_buy_time)
                 
                 if time_diff < self.cooldown_minutes:
                     remaining_minutes = self.cooldown_minutes - time_diff

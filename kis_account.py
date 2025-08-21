@@ -264,7 +264,7 @@ class KisAccount(KisBase):
         result = self.sendRequest("GET", path, tr_id, params=params)
         return result.get('output', {})
     
-    def getOverseasOrderHistory(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD"):
+    def getOverseasOrderHistory(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD", sort="DS"):
         """현지시간 기준 특정 종목의 해외주식 주문체결내역 조회
         Args:
             symbol (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열) - 모의계좌는 ""만 가능
@@ -273,6 +273,7 @@ class KisAccount(KisBase):
             order_div (str): 매도매수구분 (00:전체, 01:매도, 02:매수) - 모의계좌는 00만 가능
             settle_div (str): 체결미체결구분 (00:전체, 01:체결, 02:미체결) - 모의계좌는 00만 가능
             market (str): 해외거래소코드 (NASD:나스닥, NYSE:뉴욕, AMEX:아멕스 등) - 모의계좌는 ""만 가능
+            sort (str): 정렬순서 (DS:정순, AS:역순) - 모의계좌는 DS만 가능
             
         Returns:
             list: 주문체결내역 리스트 (연속조회 포함하여 모든 데이터 반환)

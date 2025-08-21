@@ -173,13 +173,14 @@ class TradingBot:
     def get_last_buy_order_time(self):
         """가장 마지막 매수 주문 시간 조회 (한국시간)"""
         try:
-            today_str = DateTimeUtil.get_us_date_str()
+            # 한국시간 기준 오늘과 내일 날짜
+            start_date, end_date = DateTimeUtil.get_kr_date_range_str()
             
-            # 오늘 날짜의 주문내역 조회
+            # 주문내역 조회 (한국시간 기준)
             order_history = self.kis_account.getOverseasOrderHistory(
                 symbol=self.symbol, 
-                start_date=today_str, 
-                end_date=today_str, 
+                start_date=start_date, 
+                end_date=end_date, 
                 order_div="02",  # 매수만
                 fetch_all=True
             )

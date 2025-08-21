@@ -85,7 +85,9 @@ class KisBase:
             if res_data.get('rt_cd') != '0':
                 self.logger.error(f"API 오류: {res_data.get('msg_cd')} - {res_data.get('msg1')}")
                 raise Exception(f"API 응답 오류: {res_data.get('msg1')}")
-                
+            
+            # 응답 헤더에서 tr_cont 값 추가
+            res_data['tr_cont'] = response.headers.get('tr_cont', '')
             return res_data
         
         except Exception as e:

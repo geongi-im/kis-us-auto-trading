@@ -373,9 +373,12 @@ class KisAccount(KisBase):
         # 연속조회키 추출
         next_ctx_area_fk200 = result.get('ctx_area_fk200', '')
         next_ctx_area_nk200 = result.get('ctx_area_nk200', '').strip()
-        has_more = bool(next_ctx_area_nk200)
         
-        self.logger.info(f"해외주식 주문내역 조회: {len(data)}건 조회, 연속조회 가능: {has_more}")
+        # tr_cont 헤더로 연속조회 여부 판단
+        tr_cont = result.get('tr_cont', '')
+        has_more = tr_cont in ['F', 'M']  # F or M: 다음 데이터 있음, D or E: 마지막 데이터
+        
+        self.logger.info(f"해외주식 주문내역 조회: {len(data)}건 조회, tr_cont: {tr_cont}, 연속조회 가능: {has_more}")
         if has_more:
             self.logger.info(f"연속조회키: {next_ctx_area_nk200[:20]}...")
         
@@ -383,5 +386,6 @@ class KisAccount(KisBase):
             'data': data,
             'ctx_area_fk200': next_ctx_area_fk200,
             'ctx_area_nk200': next_ctx_area_nk200,
-            'has_more': has_more
+            'has_more': has_more,
+            'tr_cont': tr_cont
         }

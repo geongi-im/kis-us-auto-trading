@@ -84,7 +84,7 @@ async def main_async():
     # 매매 봇 생성 및 시작
     trading_bot = TradingBot(trading_tickers)
     
-    await trading_bot.start_trading()
+    await trading_bot.startTrading()
 
 def main():
     """메인 함수"""

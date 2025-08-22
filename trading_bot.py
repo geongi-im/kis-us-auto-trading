@@ -135,12 +135,12 @@ class TradingBot:
             stocks = balance_info.get('stocks', [])
             
             for stock in stocks:
-                if stock.get('pdno') == ticker:
+                if stock.get('ovrs_pdno') == ticker:
                     return {
                         'quantity': int(stock.get('ord_psbl_qty', '0')),  # 주문가능수량
                         'avg_price': float(stock.get('pchs_avg_pric', '0')),  # 매입평균가
                         'current_price': float(stock.get('now_pric2', '0')),  # 현재가
-                        'profit_loss': float(stock.get('evlu_pfls_amt', '0'))  # 평가손익금액
+                        'profit_loss': float(stock.get('frcr_evlu_pfls_amt', '0'))  # 평가손익금액
                     }
             
             return {'quantity': 0, 'avg_price': 0, 'current_price': 0, 'profit_loss': 0}
@@ -218,6 +218,45 @@ class TradingBot:
             
         return None
     
+    def getLastSellOrderTime(self, ticker):
+        """가장 마지막 매도 주문 시간 조회 (한국시간)"""
+        try:
+            # 한국시간 기준 오늘과 내일 날짜
+            start_date = DateTimeUtil.get_kr_date_str(offset=-1)  # 오늘
+            end_date = DateTimeUtil.get_kr_date_str(offset=1)    # 내일
+            
+            # 주문내역 조회 (한국시간 기준)
+            order_history = self.kis_account.getOverseasOrderHistory(
+                ticker=ticker, 
+                start_date=start_date, 
+                end_date=end_date, 
+                order_div="01",  # 매도만
+                fetch_all=True
+            )
+            
+            if not order_history:
+                return None
+            
+            # 매도 주문만 필터링
+            sell_orders = [order for order in order_history if order.get('sll_buy_dvsn_cd') == '01']
+            if not sell_orders:
+                return None
+            
+            # odno 주문번호 기준 내림차순 (최신순)
+            sell_orders.sort(key=lambda x: (x.get('odno', '')), reverse=True)
+            
+            # 가장 최신 매도 주문의 order_time만 반환 (한국시간 기준)
+            latest_order = sell_orders[0]
+            order_time = latest_order.get('ord_tmd', '')  # HHMMSS (한국시간 기준)
+            
+            if order_time:
+                return order_time
+                
+        except Exception as e:
+            self.logger.error(f"{ticker} 마지막 매도 주문 시간 조회 중 오류: {e}")
+            
+        return None
+    
     def shouldBuy(self, ticker, market, current_price: float):
         """매수 신호 종합 판단 (RSI + 쿨다운 + 계좌 조건)"""
         strategy = self.strategies[ticker]
@@ -248,12 +287,25 @@ class TradingBot:
         return True
     
     def shouldSell(self, ticker, market):
-        """매도 신호 종합 판단 (RSI + 보유 주식 조건)"""
+        """매도 신호 종합 판단 (RSI + 쿨다운 + 보유 주식 조건)"""
         strategy = self.strategies[ticker]
         
         # RSI 신호 확인
         if not strategy.getSellSignal():
             return False
+        
+        # 쿨다운 시간 체크 (한국시간 기준)
+        last_sell_time_str = self.getLastSellOrderTime(ticker)
+        if last_sell_time_str:
+            # 오늘 날짜로 datetime 객체 생성 (한국시간)
+            today_kr = DateTimeUtil.get_kr_date_str()  # YYYYMMDD
+            last_sell_datetime = DateTimeUtil.parse_kr_datetime(today_kr, last_sell_time_str)
+            
+            time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_sell_datetime)
+            if time_diff < self.cooldown_minutes:
+                remaining_minutes = self.cooldown_minutes - time_diff
+                self.logger.info(f"{ticker} 매도 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+                return False
         
         # 보유 주식 확인
         stock_balance = self.getStockBalance(ticker, market)

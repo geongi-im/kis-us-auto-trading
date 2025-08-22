@@ -29,7 +29,7 @@ class LoggerUtil:
 
             # 로거 생성
             self.logger = logging.getLogger('MQLogger')
-            self.logger.setLevel(logging.INFO)
+            self.logger.setLevel(logging.DEBUG)
 
             # 이미 핸들러가 있다면 제거
             if self.logger.handlers:
@@ -37,11 +37,11 @@ class LoggerUtil:
 
             # 파일 핸들러
             file_handler = logging.FileHandler(log_file, encoding='utf-8')
-            file_handler.setLevel(logging.INFO)
+            file_handler.setLevel(logging.DEBUG)
 
             # 콘솔 핸들러
             console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
+            console_handler.setLevel(logging.DEBUG)
 
             # 포맷터 설정
             formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')

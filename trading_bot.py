@@ -13,15 +13,16 @@ from utils.datetime_util import DateTimeUtil
 
 
 class TradingBot:
-    """RSI 기반 자동매매 봇"""
+    """RSI 기반 다중 종목 자동매매 봇"""
     
-    def __init__(self, symbol: str = "TQQQ", market: str = "NASD"):
+    def __init__(self, trading_tickers: dict):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
         
-        self.symbol = symbol
-        self.market = market
+        # 거래 종목 설정 (ticker: market 형태)
+        self.trading_tickers = trading_tickers
+        self.logger.info(f"거래 종목 초기화: {list(trading_tickers.keys())}")
         
         # 환경변수에서 체크 간격 및 쿨다운 시간 가져오기 (main에서 이미 체크했으므로 반드시 존재)
         self.check_interval_minutes = int(os.getenv("CHECK_INTERVAL_MINUTES"))
@@ -35,8 +36,16 @@ class TradingBot:
         rsi_oversold = int(os.getenv("RSI_OVERSOLD"))
         rsi_overbought = int(os.getenv("RSI_OVERBOUGHT"))
         
-        # RSI 전략
-        self.strategy = RSIStrategy(symbol=symbol, market="NAS", rsi_oversold=rsi_oversold, rsi_overbought=rsi_overbought)
+        # 각 종목별 RSI 전략 생성
+        self.strategies = {}
+        for ticker, market in trading_tickers.items():
+            market_code = "NAS" if market == "NASD" else market  # NASD -> NAS 변환
+            self.strategies[ticker] = RSIStrategy(
+                symbol=ticker, 
+                market=market_code, 
+                rsi_oversold=rsi_oversold, 
+                rsi_overbought=rsi_overbought
+            )
         
         # 텔레그램 유틸
         self.telegram = TelegramUtil()
@@ -101,11 +110,11 @@ class TradingBot:
         
         return False
     
-    def get_cash_balance(self):
+    def getCashBalance(self, market):
         """현재 매수가능현금 조회"""
         try:
             # getBalance로 매수가능한 외화금액 조회
-            balance_info = self.kis_account.getBalance(market=self.market)
+            balance_info = self.kis_account.getBalance(market=market)
             summary = balance_info.get('summary', {})
             
             # 매수가능현금 (USD)
@@ -119,14 +128,14 @@ class TradingBot:
             self.logger.error(f"매수가능현금 조회 중 오류 발생: {e}")
             return 0.0
     
-    def get_stock_balance(self):
+    def getStockBalance(self, ticker, market):
         """현재 주식 보유량 조회"""
         try:
-            balance_info = self.kis_account.getBalance(market=self.market)
+            balance_info = self.kis_account.getBalance(market=market)
             stocks = balance_info.get('stocks', [])
             
             for stock in stocks:
-                if stock.get('pdno') == self.symbol:
+                if stock.get('pdno') == ticker:
                     return {
                         'quantity': int(stock.get('ord_psbl_qty', '0')),  # 주문가능수량
                         'avg_price': float(stock.get('pchs_avg_pric', '0')),  # 매입평균가
@@ -140,35 +149,37 @@ class TradingBot:
             self.logger.error(f"주식 잔고 조회 중 오류 발생: {e}")
             return {'quantity': 0, 'avg_price': 0, 'current_price': 0, 'profit_loss': 0}
         
-    def getPurchaseAmount(self, price="0", symbol=""):
+    def getPurchaseAmount(self, ticker, market, price="0"):
         """특정 종목 기준 매수 가능 금액 조회"""
         try:
             # getOverseasPurchaseAmount로 매수가능한 외화금액 조회
-            balance_info = self.kis_account.getOverseasPurchaseAmount(market=self.market, price=price, symbol=symbol)
+            balance_info = self.kis_account.getOverseasPurchaseAmount(market=market, price=price, symbol=ticker)
             
             # 매수가능현금 (USD)
             cash_balance = float(balance_info.get('ord_psbl_frcr_amt', '0'))
             
-            self.logger.debug(f"매수가능현금: ${cash_balance:.2f}")
+            self.logger.debug(f"{ticker} 매수가능현금: ${cash_balance:.2f}")
             return cash_balance
             
         except Exception as e:
-            self.logger.error(f"매수가능현금 조회 중 오류 발생: {e}")
+            self.logger.error(f"{ticker} 매수가능현금 조회 중 오류 발생: {e}")
             return 0.0
     
-    def calculate_buy_quantity(self, cash_balance: float, current_price: float):
+    def calculateBuyQuantity(self, ticker, cash_balance: float, current_price: float):
         """매수 수량 계산 (현금의 5%)"""
-        buy_amount = cash_balance * self.strategy.buy_percentage
+        strategy = self.strategies[ticker]
+        buy_amount = cash_balance * strategy.buy_percentage
         quantity = int(buy_amount / current_price)
         return max(1, quantity)  # 최소 1주
     
-    def calculate_sell_quantity(self, stock_balance):
+    def calculateSellQuantity(self, ticker, stock_balance):
         """매도 수량 계산 (보유량의 5%)"""
+        strategy = self.strategies[ticker]
         total_quantity = stock_balance['quantity']
-        sell_quantity = int(total_quantity * self.strategy.sell_percentage)
+        sell_quantity = int(total_quantity * strategy.sell_percentage)
         return max(1, min(sell_quantity, total_quantity))  # 최소 1주, 최대 보유량
     
-    def get_last_buy_order_time(self):
+    def getLastBuyOrderTime(self, ticker):
         """가장 마지막 매수 주문 시간 조회 (한국시간)"""
         try:
             # 한국시간 기준 오늘과 내일 날짜
@@ -177,7 +188,7 @@ class TradingBot:
             
             # 주문내역 조회 (한국시간 기준)
             order_history = self.kis_account.getOverseasOrderHistory(
-                symbol=self.symbol, 
+                symbol=ticker, 
                 start_date=start_date, 
                 end_date=end_date, 
                 order_div="02",  # 매수만
@@ -203,18 +214,20 @@ class TradingBot:
                 return order_time
                 
         except Exception as e:
-            self.logger.error(f"마지막 매수 주문 시간 조회 중 오류: {e}")
+            self.logger.error(f"{ticker} 마지막 매수 주문 시간 조회 중 오류: {e}")
             
         return None
     
-    def should_buy(self, current_price: float):
+    def shouldBuy(self, ticker, market, current_price: float):
         """매수 신호 종합 판단 (RSI + 쿨다운 + 계좌 조건)"""
+        strategy = self.strategies[ticker]
+        
         # RSI 신호 확인
-        if not self.strategy.get_buy_signal():
+        if not strategy.get_buy_signal():
             return False
         
         # 쿨다운 시간 체크 (한국시간 기준)
-        last_buy_time_str = self.get_last_buy_order_time()
+        last_buy_time_str = self.getLastBuyOrderTime(ticker)
         if last_buy_time_str:
             # 오늘 날짜로 datetime 객체 생성 (한국시간)
             today_kr = DateTimeUtil.get_kr_date_str()  # YYYYMMDD
@@ -223,43 +236,46 @@ class TradingBot:
             time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_buy_datetime)
             if time_diff < self.cooldown_minutes:
                 remaining_minutes = self.cooldown_minutes - time_diff
-                self.logger.info(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+                self.logger.info(f"{ticker} 매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
                 return False
         
         # 계좌 잔고 확인
-        cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
+        cash_balance = self.getPurchaseAmount(ticker, market, current_price)
         if cash_balance < current_price:
-            self.logger.debug(f"매수 불가: 현금 부족 (${cash_balance:.2f})")
+            self.logger.debug(f"{ticker} 매수 불가: 현금 부족 (${cash_balance:.2f})")
             return False
         
         return True
     
-    def should_sell(self):
+    def shouldSell(self, ticker, market):
         """매도 신호 종합 판단 (RSI + 보유 주식 조건)"""
+        strategy = self.strategies[ticker]
+        
         # RSI 신호 확인
-        if not self.strategy.get_sell_signal():
+        if not strategy.get_sell_signal():
             return False
         
         # 보유 주식 확인
-        stock_balance = self.get_stock_balance()
+        stock_balance = self.getStockBalance(ticker, market)
         if stock_balance['quantity'] == 0:
-            self.logger.debug("매도 불가: 보유 주식 없음")
+            self.logger.debug(f"{ticker} 매도 불가: 보유 주식 없음")
             return False
         
         return True
 
-    def execute_buy_order(self, current_price: float):
+    def executeBuyOrder(self, ticker, market, current_price: float):
         """매수 주문 실행"""
         try:
-            cash_balance = self.getPurchaseAmount(price=current_price, symbol=self.symbol)
-            quantity = self.calculate_buy_quantity(cash_balance, current_price)
+            strategy = self.strategies[ticker]
+            cash_balance = self.getPurchaseAmount(ticker, market, current_price)
+            quantity = self.calculateBuyQuantity(ticker, cash_balance, current_price)
             
             # 매수 주문 실행
             result = self.kis_order.buyOrder(
-                symbol=self.symbol,
+                symbol=ticker,
                 quantity=quantity,
                 price=current_price,
-                market=self.market,
+                market=market,
                 ord_dvsn="00"  # 지정가 주문
             )
             
@@ -267,8 +283,8 @@ class TradingBot:
                 self.total_trades += 1
                 
                 # 텔레그램 알림
-                rsi = self.strategy.get_current_rsi()
-                message = f"""[매수] {self.symbol} 주문 완료
+                rsi = strategy.get_current_rsi()
+                message = f"""[매수] {ticker} 주문 완료
 RSI: {rsi:.1f}
 매수량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
@@ -276,32 +292,33 @@ RSI: {rsi:.1f}
 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                 
                 self.telegram.sendMessage(message)
-                self.logger.info(f"매수 주문 성공: {quantity}주 @ ${current_price:.2f}")
+                self.logger.info(f"{ticker} 매수 주문 성공: {quantity}주 @ ${current_price:.2f}")
                 return True
             
         except Exception as e:
-            error_msg = f"매수 주문 실행 중 오류: {e}"
+            error_msg = f"{ticker} 매수 주문 실행 중 오류: {e}"
             self.logger.error(error_msg)
-            self.telegram.sendMessage(f"[오류] 매수 오류: {error_msg}")
+            self.telegram.sendMessage(f"[오류] {ticker} 매수 오류: {error_msg}")
             
         return False
     
-    def execute_sell_order(self, current_price: float):
+    def executeSellOrder(self, ticker, market, current_price: float):
         """매도 주문 실행"""
         try:
-            stock_balance = self.get_stock_balance()
+            strategy = self.strategies[ticker]
+            stock_balance = self.getStockBalance(ticker, market)
             if stock_balance['quantity'] == 0:
-                self.logger.warning("매도 불가: 보유 주식 없음")
+                self.logger.warning(f"{ticker} 매도 불가: 보유 주식 없음")
                 return False
             
-            quantity = self.calculate_sell_quantity(stock_balance)
+            quantity = self.calculateSellQuantity(ticker, stock_balance)
             
             # 매도 주문 실행
             result = self.kis_order.sellOrder(
-                symbol=self.symbol,
+                symbol=ticker,
                 quantity=quantity,
                 price=current_price,
-                market=self.market,
+                market=market,
                 ord_dvsn="00"  # 지정가 주문
             )
             
@@ -309,9 +326,9 @@ RSI: {rsi:.1f}
                 self.total_trades += 1
                 
                 # 텔레그램 알림
-                rsi = self.strategy.get_current_rsi()
+                rsi = strategy.get_current_rsi()
                 profit_loss = stock_balance['profit_loss']
-                message = f"""[매도] {self.symbol} 주문 완료
+                message = f"""[매도] {ticker} 주문 완료
 RSI: {rsi:.1f}
 매도량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
@@ -320,72 +337,82 @@ RSI: {rsi:.1f}
 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                 
                 self.telegram.sendMessage(message)
-                self.logger.info(f"매도 주문 성공: {quantity}주 @ ${current_price:.2f}")
+                self.logger.info(f"{ticker} 매도 주문 성공: {quantity}주 @ ${current_price:.2f}")
                 return True
             
         except Exception as e:
-            error_msg = f"매도 주문 실행 중 오류: {e}"
+            error_msg = f"{ticker} 매도 주문 실행 중 오류: {e}"
             self.logger.error(error_msg)
-            self.telegram.sendMessage(f"[오류] 매도 오류: {error_msg}")
+            self.telegram.sendMessage(f"[오류] {ticker} 매도 오류: {error_msg}")
             
         return False
     
-    def process_trading_signal(self, current_price: float):
-        """매매 신호 처리"""
-        # 현재 RSI 가격 업데이트
-        self.strategy.update_price(current_price)
-        
-        # RSI 계산
-        rsi = self.strategy.get_current_rsi()
-        if rsi is None:
-            self.logger.warning("RSI 계산 불가 (데이터 부족)")
-            return
-        
-        self.logger.info(f"{self.symbol} 현재가: ${current_price:.2f}, RSI: {rsi:.1f}")
-        
-        # 매수 신호 확인
-        if self.should_buy(current_price):
-            self.logger.info(f"매수 신호 감지! RSI: {rsi:.1f}")
-            self.execute_buy_order(current_price)
-        
-        # 매도 신호 확인
-        elif self.should_sell():
-            self.logger.info(f"매도 신호 감지! RSI: {rsi:.1f}")
-            self.execute_sell_order(current_price)
+    def processTradingSignal(self):
+        """모든 종목에 대한 매매 신호 처리"""
+        for ticker, market in self.trading_tickers.items():
+            try:
+                strategy = self.strategies[ticker]
+                
+                # 현재가 조회
+                market_code = "NAS" if market == "NASD" else market  # NASD -> NAS 변환
+                price_info = strategy.kis_price.getPrice(market_code, ticker)
+                current_price = float(price_info.get('last', 0))
+                
+                if current_price <= 0:
+                    self.logger.warning(f"{ticker} 유효한 가격 정보를 가져올 수 없습니다.")
+                    continue
+                
+                # 현재 RSI 가격 업데이트
+                strategy.update_price(current_price)
+                
+                # RSI 계산
+                rsi = strategy.get_current_rsi()
+                if rsi is None:
+                    self.logger.warning(f"{ticker} RSI 계산 불가 (데이터 부족)")
+                    continue
+                
+                self.logger.info(f"{ticker} 현재가: ${current_price:.2f}, RSI: {rsi:.1f}")
+                
+                # 매수 신호 확인
+                if self.shouldBuy(ticker, market, current_price):
+                    self.logger.info(f"{ticker} 매수 신호 감지! RSI: {rsi:.1f}")
+                    self.executeBuyOrder(ticker, market, current_price)
+                
+                # 매도 신호 확인
+                elif self.shouldSell(ticker, market):
+                    self.logger.info(f"{ticker} 매도 신호 감지! RSI: {rsi:.1f}")
+                    self.executeSellOrder(ticker, market, current_price)
+                    
+            except Exception as e:
+                self.logger.error(f"{ticker} 매매 신호 처리 중 오류: {e}")
+                continue
     
     async def start_trading(self):
         """매매 봇 시작"""
         self.is_running = True
         self.start_time = DateTimeUtil.get_us_now()
         
-        self.logger.info(f"RSI 자동매매 봇 시작: {self.symbol}")
+        ticker_names = list(self.trading_tickers.keys())
+        self.logger.info(f"RSI 다중 종목 자동매매 봇 시작: {', '.join(ticker_names)}")
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
-
-        result = self.kis_account.getBalance(market=self.market)
-        print(result)
-
-        # result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ", start_date="20250820", end_date="20250821", fetch_all=True)
-        # print(result)
-
-        # 해외주식 매수가능금액 조회
-        # purchase_amount = self.kis_account.getOverseasPurchaseAmount(market="NASD", price="90.4200", symbol="TQQQ")
-        # print(purchase_amount)
         
-        # 과거 데이터 로드 (실제 일봉 데이터 사용)
-        if not self.strategy.load_historical_data():
-            self.logger.error("과거 데이터 로드 실패. 봇을 종료합니다.")
-            return
+        # 모든 종목에 대한 과거 데이터 로드
+        for ticker, strategy in self.strategies.items():
+            if not strategy.load_historical_data():
+                self.logger.error(f"{ticker} 과거 데이터 로드 실패. 봇을 종료합니다.")
+                return
         
-        # 주식 보유량 조회
-        # stock_balance = self.get_stock_balance()
-        # self.logger.info(f"현재 주식 보유량: {stock_balance['quantity']}주")
+        # 모든 종목에 대한 RSI 설정 정보 표시
+        rsi_info = []
+        for ticker, strategy in self.strategies.items():
+            rsi_info.append(f"{ticker}: {strategy.rsi_oversold}/{strategy.rsi_overbought}")
         
         # 시작 알림
-        start_msg = f"""[시작] RSI 자동매매 봇
-종목: {self.symbol}
-RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
-매수/매도 비율: {self.strategy.buy_percentage*100}%
+        start_msg = f"""[시작] RSI 다중 종목 자동매매 봇
+종목: {', '.join(ticker_names)}
+RSI 임계값: {", ".join(rsi_info)}
+매수/매도 비율: {list(self.strategies.values())[0].buy_percentage*100}%
 체크 간격: {self.check_interval_minutes}분"""
         
         self.telegram.sendMessage(start_msg)
@@ -404,14 +431,8 @@ RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
                     continue
                 
                 try:
-                    # 현재가 조회
-                    price_info = self.strategy.kis_price.getPrice("NAS", self.symbol)
-                    current_price = float(price_info.get('last', 0))
-                    
-                    if current_price > 0:
-                        self.process_trading_signal(current_price)
-                    else:
-                        self.logger.warning("유효한 가격 정보를 가져올 수 없습니다.")
+                    # 모든 종목에 대한 매매 신호 처리
+                    self.processTradingSignal()
                 
                 except Exception as e:
                     error_msg = f"매매 처리 중 오류: {e}"
@@ -428,9 +449,9 @@ RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
             self.logger.error(error_msg)
             self.telegram.sendMessage(f"[긴급] 봇 오류: {error_msg}")
         finally:
-            await self.stop_trading()
+            await self.stopTrading()
     
-    async def stop_trading(self):
+    async def stopTrading(self):
         """매매 봇 종료"""
         self.is_running = False
         
@@ -439,16 +460,19 @@ RSI 임계값: {self.strategy.rsi_oversold} / {self.strategy.rsi_overbought}
             self.logger.info(f"봇 운영시간: {str(runtime).split('.')[0]}")
             self.logger.info(f"총 거래횟수: {self.total_trades}")
         
-        self.logger.info("매매 봇이 종료되었습니다.")
+        self.logger.info("다중 종목 매매 봇이 종료되었습니다.")
     
-    def get_bot_status(self):
+    def getBotStatus(self):
         """봇 현재 상태 반환"""
-        strategy_status = self.strategy.get_strategy_status()
+        strategies_status = {}
+        for ticker, strategy in self.strategies.items():
+            strategies_status[ticker] = strategy.get_strategy_status()
         
         return {
             "is_running": self.is_running,
             "start_time": self.start_time,
             "total_trades": self.total_trades,
             "is_market_hours": self.is_market_hours(),
-            "strategy": strategy_status
+            "trading_tickers": self.trading_tickers,
+            "strategies": strategies_status
         }

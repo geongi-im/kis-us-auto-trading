@@ -80,7 +80,7 @@ class RSIStrategy:
     """RSI 기반 매매 전략 클래스"""
     
     def __init__(self, 
-                 symbol: str = "TQQQ",
+                 ticker: str = "TQQQ",
                  market: str = "NAS", 
                  rsi_period: int = 14,
                  rsi_oversold: float = 30.0,
@@ -91,7 +91,7 @@ class RSIStrategy:
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
         
-        self.symbol = symbol
+        self.ticker = ticker
         self.market = market
         self.rsi_period = rsi_period
         self.rsi_oversold = rsi_oversold
@@ -114,7 +114,7 @@ class RSIStrategy:
             # 일봉 데이터 조회 (더 안정적인 RSI 계산을 위해)
             chart_data = self.kis_price.getDailyPrice(
                 market=self.market,
-                symbol=self.symbol,
+                symbol=self.ticker,
                 base_date=""  # 최근 데이터
             )
             
@@ -157,13 +157,14 @@ class RSIStrategy:
             
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
-                symbol=self.symbol,
+                symbol=self.ticker,
                 time_frame="5",  # 5분봉으로 노이즈 줄이기
                 include_prev_day="1"
             )
             
             if not chart_data:
-                return self._load_dummy_data()
+                self.logger.error(f"{self.market} {self.ticker} 종목 분봉 데이터 로드 실패")
+                return False
             
             # 5분봉 데이터 처리
             for data in reversed(chart_data):
@@ -220,7 +221,7 @@ class RSIStrategy:
         current_price = prices[-1] if prices else None
         
         return {
-            "symbol": self.symbol,
+            "ticker": self.ticker,
             "current_price": current_price,
             "current_rsi": rsi,
             "data_length": self.price_history.get_length(),

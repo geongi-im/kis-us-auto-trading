@@ -9,28 +9,28 @@ from utils.logger_util import LoggerUtil
 # 환경변수 로드
 load_dotenv()
 
-def parseTradingSymbols():
-    """TRADING_SYMBOLS 환경변수를 파싱하여 딕셔너리로 반환"""
-    trading_symbols_str = os.getenv("TRADING_SYMBOLS", "")
-    if not trading_symbols_str:
-        raise Exception("TRADING_SYMBOLS 환경변수가 설정되지 않았습니다.")
+def parseTradingTickers():
+    """TRADING_TICKERS 환경변수를 파싱하여 딕셔너리로 반환"""
+    trading_tickers_str = os.getenv("TRADING_TICKERS", "")
+    if not trading_tickers_str:
+        raise Exception("TRADING_TICKERS 환경변수가 설정되지 않았습니다.")
     
     trading_tickers = {}
     try:
         # NASD:TQQQ,NASD:QQQ,NYSE:NVDA 형태를 파싱
-        for item in trading_symbols_str.split(","):
+        for item in trading_tickers_str.split(","):
             market, ticker = item.strip().split(":")
             trading_tickers[ticker] = market
         
         if not trading_tickers:
-            raise Exception("TRADING_SYMBOLS에서 유효한 ticker를 찾을 수 없습니다.")
+            raise Exception("TRADING_TICKERS에서 유효한 ticker를 찾을 수 없습니다.")
             
         return trading_tickers
         
     except ValueError as e:
-        raise Exception(f"TRADING_SYMBOLS 형식이 잘못되었습니다. 올바른 형식: NASD:TQQQ,NYSE:NVDA - 오류: {e}")
+        raise Exception(f"TRADING_TICKERS 형식이 잘못되었습니다. 올바른 형식: NASD:TQQQ,NYSE:NVDA - 오류: {e}")
     except Exception as e:
-        raise Exception(f"TRADING_SYMBOLS 파싱 중 오류 발생: {e}")
+        raise Exception(f"TRADING_TICKERS 파싱 중 오류 발생: {e}")
 
 # 필수 환경변수 체크 함수
 def checkEnvVariables():
@@ -38,7 +38,7 @@ def checkEnvVariables():
     required_vars = ['APP_KEY', 'APP_SECRET', 'ACCOUNT_NO', 'IS_VIRTUAL', 
                      'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'MARKET_START_TIME', 
                      'MARKET_END_TIME', 'AUTO_SHUTDOWN_TIME', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT',
-                     'COOLDOWN_MINUTES', 'CHECK_INTERVAL_MINUTES', 'TRADING_SYMBOLS']
+                     'COOLDOWN_MINUTES', 'CHECK_INTERVAL_MINUTES', 'TRADING_TICKERS']
     missing_vars = [var for var in required_vars if os.getenv(var) is None]
     
     if missing_vars:
@@ -75,7 +75,7 @@ async def main_async():
     logger.info(f"REST API URL: {os.getenv('REST_URL_BASE')}")
     
     # 거래 종목 설정 파싱
-    trading_tickers = parseTradingSymbols()
+    trading_tickers = parseTradingTickers()
     logger.info(f"거래 종목: {', '.join([f'{ticker}({market})' for ticker, market in trading_tickers.items()])}")
     
     # RSI 자동매매 봇 시작

@@ -41,7 +41,7 @@ class TradingBot:
         for ticker, market in trading_tickers.items():
             market_code = "NAS" if market == "NASD" else market  # NASD -> NAS 변환
             self.strategies[ticker] = RSIStrategy(
-                symbol=ticker, 
+                ticker=ticker, 
                 market=market_code, 
                 rsi_oversold=rsi_oversold, 
                 rsi_overbought=rsi_overbought

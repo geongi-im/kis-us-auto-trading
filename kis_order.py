@@ -21,11 +21,11 @@ class KisOrder(KisBase):
             
         return tr_id
     
-    def executeOrder(self, action, symbol, quantity, price=0, market="NASD", ord_dvsn="00"):
+    def executeOrder(self, action, ticker, quantity, price=0, market="NASD", ord_dvsn="00"):
         """주문 실행
         Args:
             action (str): 'buy' 또는 'sell'
-            symbol (str): 종목코드 (예: 'QQQ')
+            ticker (str): 종목코드 (예: 'QQQ')
             quantity (int): 주문 수량
             price (float): 주문 가격 (시장가 주문일 경우 무시됨)
             market (str): 거래소 코드 (예: NASD : 나스닥, NYSE : 뉴욕, AMEX : 아멕스)
@@ -54,7 +54,7 @@ class KisOrder(KisBase):
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": market,
-            "PDNO": symbol,
+            "PDNO": ticker,
             "ORD_QTY": str(quantity),
             "OVRS_ORD_UNPR": str(price),
             "ORD_SVR_DVSN_CD": "0",
@@ -70,10 +70,10 @@ class KisOrder(KisBase):
         
         return result.get('output', {})
     
-    def buyOrder(self, symbol, quantity, price=0, market="NASD", ord_dvsn="00"):
+    def buyOrder(self, ticker, quantity, price=0, market="NASD", ord_dvsn="00"):
         """매수 주문
         Args:
-            symbol (str): 종목코드 (예: 'QQQ')
+            ticker (str): 종목코드 (예: 'QQQ')
             quantity (int): 주문 수량
             price (float): 주문 가격 (시장가 주문일 경우 무시됨)
             market (str): 거래소 코드 (예: NASD : 나스닥, NYSE : 뉴욕, AMEX : 아멕스)
@@ -88,12 +88,12 @@ class KisOrder(KisBase):
         Returns:
             dict: 주문 결과 데이터
         """
-        return self.executeOrder('buy', symbol, quantity, price, market, ord_dvsn)
+        return self.executeOrder('buy', ticker, quantity, price, market, ord_dvsn)
     
-    def sellOrder(self, symbol, quantity, price=0, market="NASD", ord_dvsn="00"):
+    def sellOrder(self, ticker, quantity, price=0, market="NASD", ord_dvsn="00"):
         """매도 주문
         Args:
-            symbol (str): 종목코드 (예: 'QQQ')
+            ticker (str): 종목코드 (예: 'QQQ')
             quantity (int): 주문 수량
             price (float): 주문 가격 (시장가 주문일 경우 무시됨)
             market (str): 거래소 코드 (예: NASD : 나스닥, NYSE : 뉴욕, AMEX : 아멕스)
@@ -117,7 +117,7 @@ class KisOrder(KisBase):
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": market,
-            "PDNO": symbol,
+            "PDNO": ticker,
             "ORD_QTY": str(quantity),
             "OVRS_ORD_UNPR": str(price),
             "ORD_SVR_DVSN_CD": "0",
@@ -134,10 +134,10 @@ class KisOrder(KisBase):
         
         return result.get('output', {})
     
-    def modifyOrder(self, symbol, org_order_no, quantity, price, market="NASD", order_type="normal"):
+    def modifyOrder(self, ticker, org_order_no, quantity, price, market="NASD", order_type="normal"):
         """주문 정정
         Args:
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             org_order_no (str): 원주문번호
             quantity (int): 정정 수량
             price (float): 정정 가격
@@ -153,7 +153,7 @@ class KisOrder(KisBase):
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": market,
-            "PDNO": symbol,
+            "PDNO": ticker,
             "ORGN_ODNO": org_order_no,
             "ORD_QTY": str(quantity),
             "OVRS_ORD_UNPR": str(price),
@@ -167,10 +167,10 @@ class KisOrder(KisBase):
         
         return result.get('output', {})
     
-    def cancelOrder(self, symbol, org_order_no, quantity, market="NASD", order_type="normal"):
+    def cancelOrder(self, ticker, org_order_no, quantity, market="NASD", order_type="normal"):
         """주문 취소
         Args:
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             org_order_no (str): 원주문번호
             quantity (int): 취소 수량
             market (str): 거래소 코드
@@ -185,7 +185,7 @@ class KisOrder(KisBase):
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": market,
-            "PDNO": symbol,
+            "PDNO": ticker,
             "ORGN_ODNO": org_order_no,
             "ORD_QTY": str(quantity),
             "OVRS_ORD_UNPR": "0",  # 취소 시 0 입력

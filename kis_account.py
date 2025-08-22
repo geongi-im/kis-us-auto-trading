@@ -68,14 +68,14 @@ class KisAccount(KisBase):
             "stocks": result.get('output1', [])
         }
     
-    def getTradeHistory(self, start_date="", end_date="", market="", buy_sell="", symbol=""):
+    def getTradeHistory(self, start_date="", end_date="", market="", buy_sell="", ticker=""):
         """체결내역 조회
         Args:
             start_date (str): 조회 시작일 (YYYYMMDD)
             end_date (str): 조회 종료일 (YYYYMMDD)
             market (str): 거래소 코드
             buy_sell (str): 매매구분 (1:매도, 2:매수)
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             
         Returns:
             list: 체결 내역 리스트
@@ -100,7 +100,7 @@ class KisAccount(KisBase):
             "INQR_END_DT": end_date,
             "SLL_BUY_DVSN": buy_sell,  # 매매구분
             "OVRS_EXCG_CD": market,    # 해외거래소코드
-            "PDNO": symbol,            # 종목코드
+            "PDNO": ticker,            # 종목코드
             "CCLD_NCCS_DVSN": "1"      # 체결미체결구분 1:체결, 2:미체결
         }
         
@@ -154,12 +154,12 @@ class KisAccount(KisBase):
             "stocks": result.get('output1', [])
         }
     
-    def getProfitLoss(self, market="", currency="", symbol="", start_date="", end_date=""):
+    def getProfitLoss(self, market="", currency="", ticker="", start_date="", end_date=""):
         """기간손익 조회
         Args:
             market (str): 거래소 코드
             currency (str): 통화코드
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             start_date (str): 조회 시작일 (YYYYMMDD)
             end_date (str): 조회 종료일 (YYYYMMDD)
             
@@ -182,7 +182,7 @@ class KisAccount(KisBase):
             "TR_ID": tr_id,
             "OVRS_EXCG_CD": market,
             "CRCY_CD": currency,
-            "PDNO": symbol,
+            "PDNO": ticker,
             "INQR_STRT_DT": start_date,
             "INQR_END_DT": end_date,
             "CTX_AREA_FK200": "",
@@ -239,12 +239,12 @@ class KisAccount(KisBase):
             "deposit_info": result.get('output3', {})  # 예수금 정보
         }
     
-    def getOverseasPurchaseAmount(self, market="NASD", price="0", symbol=""):
+    def getOverseasPurchaseAmount(self, market="NASD", price="0", ticker=""):
         """해외주식 매수가능금액조회
         Args:
             market (str): 해외거래소코드 (NASD : 나스닥 / NYSE : 뉴욕 / AMEX : 아멕스 / SEHK : 홍콩 / SHAA : 중국상해 / SZAA : 중국심천 / TKSE : 일본 / HASE : 하노이거래소 / VNSE : 호치민거래소)
             price (str): 해외주문단가 (23.8) 정수부분 23자리, 소수부분 8자리
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             
         Returns:
             dict: 해외주식 매수 가능금액 조회 정보 (output: 매수가능금액)
@@ -257,17 +257,17 @@ class KisAccount(KisBase):
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": market, #해외거래소코드
             "OVRS_ORD_UNPR": price, # 해외주문단가 (23.8) 정수부분 23자리, 소수부분 8자리
-            "ITEM_CD": symbol, #종목코드
+            "ITEM_CD": ticker, #종목코드
         }
         
         path = "uapi/overseas-stock/v1/trading/inquire-psamount"
         result = self.sendRequest("GET", path, tr_id, params=params)
         return result.get('output', {})
     
-    def getOverseasOrderHistory(self, symbol="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD", sort="DS", ctx_area_fk200="", ctx_area_nk200="", fetch_all=False):
+    def getOverseasOrderHistory(self, ticker="", start_date="", end_date="", order_div="00", settle_div="00", market="NASD", sort="DS", ctx_area_fk200="", ctx_area_nk200="", fetch_all=False):
         """현지시간 기준 특정 종목의 해외주식 주문체결내역 조회
         Args:
-            symbol (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열) - 모의계좌는 ""만 가능
+            ticker (str): 종목코드 (특정 종목을 조회할 경우, 전체 조회시 빈 문자열) - 모의계좌는 ""만 가능
             start_date (str): 주문시작일자 (YYYYMMDD, 현지시각 기준)
             end_date (str): 주문종료일자 (YYYYMMDD, 현지시각 기준)
             order_div (str): 매도매수구분 (00:전체, 01:매도, 02:매수) - 모의계좌는 00만 가능
@@ -290,7 +290,7 @@ class KisAccount(KisBase):
         
         # 모의투자 제약사항 적용
         if self.is_virtual:
-            symbol = ""           # 모의투자는 ""만 가능
+            ticker = ""           # 모의투자는 ""만 가능
             order_div = "00"      # 모의투자는 00만 가능
             settle_div = "00"     # 모의투자는 00만 가능  
             market = "%"           # 모의투자는 "%"만 가능
@@ -307,7 +307,7 @@ class KisAccount(KisBase):
                 page_count += 1
                 # 자기 자신을 단일 페이지 모드로 호출
                 result = self.getOverseasOrderHistory(
-                    symbol=symbol,
+                    ticker=ticker,
                     start_date=start_date,
                     end_date=end_date,
                     order_div=order_div,
@@ -344,7 +344,7 @@ class KisAccount(KisBase):
         params = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
-            "PDNO": symbol if symbol else ("%" if not self.is_virtual else ""),
+            "PDNO": ticker if ticker else ("%" if not self.is_virtual else ""),
             "ORD_STRT_DT": start_date,
             "ORD_END_DT": end_date,
             "SLL_BUY_DVSN": order_div,

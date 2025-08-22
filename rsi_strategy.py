@@ -114,7 +114,7 @@ class RSIStrategy:
             # 일봉 데이터 조회 (더 안정적인 RSI 계산을 위해)
             chart_data = self.kis_price.getDailyPrice(
                 market=self.market,
-                symbol=self.ticker,
+                ticker=self.ticker,
                 base_date=""  # 최근 데이터
             )
             
@@ -157,7 +157,7 @@ class RSIStrategy:
             
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
-                symbol=self.ticker,
+                ticker=self.ticker,
                 time_frame="5",  # 5분봉으로 노이즈 줄이기
                 include_prev_day="1"
             )

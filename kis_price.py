@@ -3,11 +3,11 @@ from kis_base import KisBase
 class KisPrice(KisBase):
     """시세 관련 API"""
     
-    def getPrice(self, market, symbol):
+    def getPrice(self, market, ticker):
         """현재가 조회
         Args:
             market (str): 거래소 코드 (NAS:나스닥, NYS:뉴욕 등)
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             
         Returns:
             dict: 현재가 정보
@@ -17,7 +17,7 @@ class KisPrice(KisBase):
         params = {
             "AUTH": "",
             "EXCD": market,
-            "SYMB": symbol
+            "SYMB": ticker
         }
         
         path = "uapi/overseas-price/v1/quotations/price"
@@ -25,11 +25,11 @@ class KisPrice(KisBase):
         result = self.sendRequest("GET", path, tr_id, params=params)
         return result.get('output', {})
     
-    def getDailyPrice(self, market, symbol, base_date=""):
+    def getDailyPrice(self, market, ticker, base_date=""):
         """일별시세 조회
         Args:
             market (str): 거래소 코드
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             base_date (str): 기준일(YYYYMMDD)
             
         Returns:
@@ -40,7 +40,7 @@ class KisPrice(KisBase):
         params = {
             "AUTH": "",
             "EXCD": market,
-            "SYMB": symbol,
+            "SYMB": ticker,
             "GUBN": "0",
             "BYMD": base_date,
             "MODP": "0"
@@ -51,11 +51,11 @@ class KisPrice(KisBase):
         result = self.sendRequest("GET", path, tr_id, params=params)
         return result.get('output2', [])
     
-    def getStockDetail(self, market, symbol):
+    def getStockDetail(self, market, ticker):
         """현재가 상세 조회
         Args:
             market (str): 거래소 코드
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             
         Returns:
             dict: 현재가 상세 정보
@@ -65,7 +65,7 @@ class KisPrice(KisBase):
         params = {
             "AUTH": "",
             "EXCD": market,
-            "SYMB": symbol
+            "SYMB": ticker
         }
         
         path = "uapi/overseas-price/v1/quotations/price-detail"
@@ -73,11 +73,11 @@ class KisPrice(KisBase):
         result = self.sendRequest("GET", path, tr_id, params=params)
         return result.get('output', {})
     
-    def getAskingPrice(self, market, symbol):
+    def getAskingPrice(self, market, ticker):
         """호가 조회
         Args:
             market (str): 거래소 코드
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             
         Returns:
             dict: 호가 정보
@@ -87,7 +87,7 @@ class KisPrice(KisBase):
         params = {
             "AUTH": "",
             "EXCD": market,
-            "SYMB": symbol
+            "SYMB": ticker
         }
         
         path = "uapi/overseas-price/v1/quotations/asking-price-exp"
@@ -99,11 +99,11 @@ class KisPrice(KisBase):
             "bids": result.get('output3', [])
         }
     
-    def getMinuteChartPrice(self, market, symbol, time_frame="1", include_prev_day="1"):
+    def getMinuteChartPrice(self, market, ticker, time_frame="1", include_prev_day="1"):
         """분봉 조회
         Args:
             market (str): 거래소 코드
-            symbol (str): 종목코드
+            ticker (str): 종목코드
             time_frame (str): 시간단위(1, 3, 5, 10, 15, 30, 60분)
             include_prev_day (str): 전일포함여부(0:미포함, 1:포함)
             
@@ -115,7 +115,7 @@ class KisPrice(KisBase):
         params = {
             "AUTH": "",
             "EXCD": market,
-            "SYMB": symbol,
+            "SYMB": ticker,
             "NMIN": time_frame,
             "PINC": include_prev_day,  # 전일 포함 여부 (0:불포함, 1:포함)
             "NEXT": "",

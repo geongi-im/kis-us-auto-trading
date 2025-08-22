@@ -153,7 +153,7 @@ class TradingBot:
         """특정 종목 기준 매수 가능 금액 조회"""
         try:
             # getOverseasPurchaseAmount로 매수가능한 외화금액 조회
-            balance_info = self.kis_account.getOverseasPurchaseAmount(market=market, price=price, symbol=ticker)
+            balance_info = self.kis_account.getOverseasPurchaseAmount(market=market, price=price, ticker=ticker)
             
             # 매수가능현금 (USD)
             cash_balance = float(balance_info.get('ord_psbl_frcr_amt', '0'))
@@ -188,7 +188,7 @@ class TradingBot:
             
             # 주문내역 조회 (한국시간 기준)
             order_history = self.kis_account.getOverseasOrderHistory(
-                symbol=ticker, 
+                ticker=ticker, 
                 start_date=start_date, 
                 end_date=end_date, 
                 order_div="02",  # 매수만
@@ -272,7 +272,7 @@ class TradingBot:
             
             # 매수 주문 실행
             result = self.kis_order.buyOrder(
-                symbol=ticker,
+                ticker=ticker,
                 quantity=quantity,
                 price=current_price,
                 market=market,
@@ -315,7 +315,7 @@ RSI: {rsi:.1f}
             
             # 매도 주문 실행
             result = self.kis_order.sellOrder(
-                symbol=ticker,
+                ticker=ticker,
                 quantity=quantity,
                 price=current_price,
                 market=market,

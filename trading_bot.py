@@ -24,9 +24,10 @@ class TradingBot:
         self.trading_tickers = trading_tickers
         self.logger.info(f"거래 종목 초기화: {list(trading_tickers.keys())}")
         
-        # 환경변수에서 체크 간격 및 쿨다운 시간 가져오기 (main에서 이미 체크했으므로 반드시 존재)
+        # 환경변수에서 체크 간격 및 대기시간 가져오기 (main에서 이미 체크했으므로 반드시 존재)
         self.check_interval_minutes = int(os.getenv("CHECK_INTERVAL_MINUTES"))
-        self.cooldown_minutes = int(os.getenv("COOLDOWN_MINUTES"))
+        self.buy_delay_minutes = int(os.getenv("BUY_DELAY_MIN"))
+        self.sell_delay_minutes = int(os.getenv("SELL_DELAY_MIN"))
         
         # KIS API 객체들
         self.kis_order = KisOrder()
@@ -258,14 +259,14 @@ class TradingBot:
         return None
     
     def shouldBuy(self, ticker, market, current_price: float):
-        """매수 신호 종합 판단 (RSI + 쿨다운 + 계좌 조건)"""
+        """매수 신호 종합 판단 (RSI + 대기시간 + 계좌 조건)"""
         strategy = self.strategies[ticker]
         
         # RSI 신호 확인
         if not strategy.getBuySignal():
             return False
         
-        # 쿨다운 시간 체크 (한국시간 기준)
+        # 매수 대기시간 체크 (한국시간 기준)
         last_buy_time_str = self.getLastBuyOrderTime(ticker)
         if last_buy_time_str:
             # 오늘 날짜로 datetime 객체 생성 (한국시간)
@@ -273,9 +274,9 @@ class TradingBot:
             last_buy_datetime = DateTimeUtil.parse_kr_datetime(today_kr, last_buy_time_str)
             
             time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_buy_datetime)
-            if time_diff < self.cooldown_minutes:
-                remaining_minutes = self.cooldown_minutes - time_diff
-                self.logger.info(f"{ticker} 매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+            if time_diff < self.buy_delay_minutes:
+                remaining_minutes = self.buy_delay_minutes - time_diff
+                self.logger.info(f"{ticker} 매수 대기 중: {remaining_minutes:.1f}분 후 가능")
                 return False
         
         # 계좌 잔고 확인
@@ -287,14 +288,14 @@ class TradingBot:
         return True
     
     def shouldSell(self, ticker, market):
-        """매도 신호 종합 판단 (RSI + 쿨다운 + 보유 주식 조건)"""
+        """매도 신호 종합 판단 (RSI + 대기시간 + 보유 주식 조건)"""
         strategy = self.strategies[ticker]
         
         # RSI 신호 확인
         if not strategy.getSellSignal():
             return False
         
-        # 쿨다운 시간 체크 (한국시간 기준)
+        # 매도 대기시간 체크 (한국시간 기준)
         last_sell_time_str = self.getLastSellOrderTime(ticker)
         if last_sell_time_str:
             # 오늘 날짜로 datetime 객체 생성 (한국시간)
@@ -302,9 +303,9 @@ class TradingBot:
             last_sell_datetime = DateTimeUtil.parse_kr_datetime(today_kr, last_sell_time_str)
             
             time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_sell_datetime)
-            if time_diff < self.cooldown_minutes:
-                remaining_minutes = self.cooldown_minutes - time_diff
-                self.logger.info(f"{ticker} 매도 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+            if time_diff < self.sell_delay_minutes:
+                remaining_minutes = self.sell_delay_minutes - time_diff
+                self.logger.info(f"{ticker} 매도 대기 중: {remaining_minutes:.1f}분 후 가능")
                 return False
         
         # 보유 주식 확인

@@ -15,9 +15,7 @@ from utils.datetime_util import DateTimeUtil
 class TradingBot:
     """RSI 기반 자동매매 봇"""
     
-    def __init__(self, 
-                 symbol: str = "TQQQ",
-                 market: str = "NASD"):
+    def __init__(self, symbol: str = "TQQQ", market: str = "NASD"):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -225,7 +223,7 @@ class TradingBot:
             time_diff = DateTimeUtil.get_time_diff_minutes_kr(last_buy_datetime)
             if time_diff < self.cooldown_minutes:
                 remaining_minutes = self.cooldown_minutes - time_diff
-                self.logger.debug(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
+                self.logger.info(f"매수 쿨다운 중: {remaining_minutes:.1f}분 후 가능")
                 return False
         
         # 계좌 잔고 확인
@@ -363,6 +361,9 @@ RSI: {rsi:.1f}
         self.logger.info(f"RSI 자동매매 봇 시작: {self.symbol}")
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
+
+        result = self.kis_account.getBalance(market=self.market)
+        print(result)
 
         # result = self.kis_account.getOverseasOrderHistory(symbol="TQQQ", start_date="20250820", end_date="20250821", fetch_all=True)
         # print(result)

@@ -17,7 +17,7 @@ def parseTradingTickers():
     
     trading_tickers = {}
     try:
-        # NASD:TQQQ,NASD:QQQ,NYSE:NVDA 형태를 파싱
+        # market:ticker 형태를 파싱
         for item in trading_tickers_str.split(","):
             market, ticker = item.strip().split(":")
             trading_tickers[ticker] = market

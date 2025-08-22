@@ -109,8 +109,6 @@ class RSIStrategy:
     def loadHistoricalData(self, days: int = 30):
         """과거 데이터 로드 (장 시작 전 호출)"""
         try:
-            self.logger.info(f"실제 일봉 데이터 로딩 중...")
-            
             # 일봉 데이터 조회 (더 안정적인 RSI 계산을 위해)
             chart_data = self.kis_price.getDailyPrice(
                 market=self.market,
@@ -119,7 +117,7 @@ class RSIStrategy:
             )
             
             if not chart_data:
-                self.logger.warning("일봉 데이터 조회 실패, 분봉 데이터로 시도...")
+                self.logger.warning(f"{self.market}:{self.ticker} 일봉 데이터 조회 실패, 분봉 데이터로 시도...")
                 return self._loadMinuteData()
             
             # 일봉 데이터 처리 (시간순으로 정렬)
@@ -137,11 +135,11 @@ class RSIStrategy:
                 except (ValueError, KeyError):
                     continue
             
-            self.logger.info(f"총 {self.price_history.getLength()}개의 일봉 데이터 로드 완료")
+            self.logger.info(f"{self.market}:{self.ticker} 총 {self.price_history.getLength()}개의 일봉 데이터 로드 완료")
             
             # 데이터가 부족하면 분봉으로 보완
             if self.price_history.getLength() < 15:
-                self.logger.warning("일봉 데이터 부족, 분봉으로 보완...")
+                self.logger.warning(f"{self.market}:{self.ticker} 일봉 데이터 부족, 분봉으로 보완...")
                 return self._loadMinuteData()
             
             return True

@@ -290,7 +290,7 @@ class KisAccount(KisBase):
         
         # 모의투자 제약사항 적용
         if self.is_virtual:
-            ticker = ""           # 모의투자는 ""만 가능
+            # ticker = ""           # 모의투자는 ""만 가능
             order_div = "00"      # 모의투자는 00만 가능
             settle_div = "00"     # 모의투자는 00만 가능  
             market = "%"           # 모의투자는 "%"만 가능
@@ -344,7 +344,7 @@ class KisAccount(KisBase):
         params = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
-            "PDNO": ticker if ticker else ("%" if not self.is_virtual else ""),
+            "PDNO": ticker,
             "ORD_STRT_DT": start_date,
             "ORD_END_DT": end_date,
             "SLL_BUY_DVSN": order_div,

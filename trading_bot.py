@@ -72,7 +72,7 @@ class TradingBot:
         # 자동 종료 시간 (미국 현지시간 기준)  
         self.auto_shutdown_time = time(shutdown_hour, shutdown_min)
     
-    def is_market_hours(self):
+    def isMarketHours(self):
         """현재 시간이 미국 장시간인지 확인 (미국 현지시간 기준)"""
         us_now = DateTimeUtil.get_us_now().time()
         
@@ -84,7 +84,7 @@ class TradingBot:
             # 자정을 넘나드는 경우 (예: 23:00 ~ 04:00)  
             return us_now >= self.market_start_time or us_now <= self.market_end_time
     
-    def should_shutdown(self):
+    def shouldShutdown(self):
         """자동 종료 시간인지 확인 (미국 현지시간 기준)"""
         us_now = DateTimeUtil.get_us_now()
         us_current_time = us_now.time()
@@ -223,7 +223,7 @@ class TradingBot:
         strategy = self.strategies[ticker]
         
         # RSI 신호 확인
-        if not strategy.get_buy_signal():
+        if not strategy.getBuySignal():
             return False
         
         # 쿨다운 시간 체크 (한국시간 기준)
@@ -252,7 +252,7 @@ class TradingBot:
         strategy = self.strategies[ticker]
         
         # RSI 신호 확인
-        if not strategy.get_sell_signal():
+        if not strategy.getSellSignal():
             return False
         
         # 보유 주식 확인
@@ -283,7 +283,7 @@ class TradingBot:
                 self.total_trades += 1
                 
                 # 텔레그램 알림
-                rsi = strategy.get_current_rsi()
+                rsi = strategy.getCurrentRsi()
                 message = f"""[매수] {ticker} 주문 완료
 RSI: {rsi:.1f}
 매수량: {quantity}주 (${quantity * current_price:.2f})
@@ -326,7 +326,7 @@ RSI: {rsi:.1f}
                 self.total_trades += 1
                 
                 # 텔레그램 알림
-                rsi = strategy.get_current_rsi()
+                rsi = strategy.getCurrentRsi()
                 profit_loss = stock_balance['profit_loss']
                 message = f"""[매도] {ticker} 주문 완료
 RSI: {rsi:.1f}
@@ -363,10 +363,10 @@ RSI: {rsi:.1f}
                     continue
                 
                 # 현재 RSI 가격 업데이트
-                strategy.update_price(current_price)
+                strategy.updatePrice(current_price)
                 
                 # RSI 계산
-                rsi = strategy.get_current_rsi()
+                rsi = strategy.getCurrentRsi()
                 if rsi is None:
                     self.logger.warning(f"{ticker} RSI 계산 불가 (데이터 부족)")
                     continue
@@ -387,7 +387,7 @@ RSI: {rsi:.1f}
                 self.logger.error(f"{ticker} 매매 신호 처리 중 오류: {e}")
                 continue
     
-    async def start_trading(self):
+    async def startTrading(self):
         """매매 봇 시작"""
         self.is_running = True
         self.start_time = DateTimeUtil.get_us_now()
@@ -399,7 +399,7 @@ RSI: {rsi:.1f}
         
         # 모든 종목에 대한 과거 데이터 로드
         for ticker, strategy in self.strategies.items():
-            if not strategy.load_historical_data():
+            if not strategy.loadHistoricalData():
                 self.logger.error(f"{ticker} 과거 데이터 로드 실패. 봇을 종료합니다.")
                 return
         
@@ -420,12 +420,12 @@ RSI 임계값: {", ".join(rsi_info)}
         try:
             while self.is_running:
                 # 자동 종료 시간 체크
-                if self.should_shutdown():
+                if self.shouldShutdown():
                     self.logger.info("자동 종료 시간에 도달했습니다. 프로그램을 종료합니다.")
                     break
                 
                 # 장시간 체크
-                if not self.is_market_hours():
+                if not self.isMarketHours():
                     self.logger.info("장시간이 아닙니다. 대기 중...")
                     await asyncio.sleep(60)  # 1분 대기
                     continue
@@ -466,13 +466,13 @@ RSI 임계값: {", ".join(rsi_info)}
         """봇 현재 상태 반환"""
         strategies_status = {}
         for ticker, strategy in self.strategies.items():
-            strategies_status[ticker] = strategy.get_strategy_status()
+            strategies_status[ticker] = strategy.getStrategyStatus()
         
         return {
             "is_running": self.is_running,
             "start_time": self.start_time,
             "total_trades": self.total_trades,
-            "is_market_hours": self.is_market_hours(),
+            "is_market_hours": self.isMarketHours(),
             "trading_tickers": self.trading_tickers,
             "strategies": strategies_status
         }

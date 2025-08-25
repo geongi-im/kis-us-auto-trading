@@ -460,10 +460,7 @@ RSI: {rsi:.1f}
         rsi_info = []
         for ticker, strategy in self.strategies.items():
             rsi_info.append(f"{ticker}: {strategy.rsi_oversold}/{strategy.rsi_overbought}")
-        
-        # 장 시작시 보유 종목 현황 알림
-        self.sendPortfolioStatus()
-        
+                
         # 시작 알림
         start_msg = f"""[시작] RSI 다중 종목 자동매매 봇
 종목: {', '.join(ticker_names)}
@@ -472,6 +469,9 @@ RSI 임계값: {", ".join(rsi_info)}
 체크 간격: {self.check_interval_minutes}분"""
         
         self.telegram.sendMessage(start_msg)
+        
+        # 장 시작시 보유 종목 현황 알림
+        self.sendPortfolioStatus()
         
         try:
             while self.is_running:
@@ -524,12 +524,7 @@ RSI 임계값: {", ".join(rsi_info)}
             self.logger.info("보유 종목 현황 조회 시작")
             
             # 미국 시장 보유 종목 조회
-            balance_result = self.kis_account.getOverseasPresentBalance(
-                wcrc_frcr_dvsn="02",  # 외화
-                natn_cd="840",        # 미국
-                tr_mket_cd="00",      # 전체 시장
-                inqr_dvsn_cd="00"     # 전체
-            )
+            balance_result = self.kis_account.getBalance(market="NASD")
             
             stocks = balance_result.get('stocks', [])
             summary = balance_result.get('summary', {})
@@ -558,18 +553,20 @@ RSI 임계값: {", ".join(rsi_info)}
         message = f"📊 <b>장 시작 알림</b>\n"
         message += f"🕘 {current_time}\n\n"
         
-        # 계좌 요약 정보
+        # 계좌 요약 정보 (summary가 있는 경우만)
         if summary:
-            total_eval_amt = summary.get('tot_evlu_pfls_amt', '0')  # 총평가손익금액
-            total_eval_rate = summary.get('evlu_pfls_rt', '0')     # 평가손익율
-            total_purchase_amt = summary.get('pchs_amt_smtl_amt', '0')  # 매입금액합계
-            total_eval_value = summary.get('evlu_amt_smtl_amt', '0')    # 평가금액합계
+            # getBalance()에서 반환되는 필드명 사용
+            cash_balance = summary.get('frcr_pchs_amt1', '0')  # 외화매수가능금액1
+            total_eval_amt = summary.get('evlu_pfls_amt', '0')  # 평가손익금액
+            total_eval_rate = summary.get('evlu_pfls_rt', '0')  # 평가손익율
             
             message += f"💰 <b>계좌 요약</b>\n"
-            message += f"매입금액: ${float(total_purchase_amt):,.2f}\n"
-            message += f"평가금액: ${float(total_eval_value):,.2f}\n"
-            message += f"평가손익: ${float(total_eval_amt):,.2f}\n"
-            message += f"수익률: {float(total_eval_rate):+.2f}%\n\n"
+            message += f"매수가능금액: ${float(cash_balance):,.2f}\n"
+            if total_eval_amt != '0':
+                message += f"평가손익: ${float(total_eval_amt):,.2f}\n"
+            if total_eval_rate != '0':
+                message += f"수익률: {float(total_eval_rate):+.2f}%\n"
+            message += "\n"
         
         # 보유 종목별 상세 정보
         message += f"📈 <b>보유 종목 ({len(stocks)}개)</b>\n\n"
@@ -577,11 +574,11 @@ RSI 임계값: {", ".join(rsi_info)}
         for i, stock in enumerate(stocks, 1):
             ticker = stock.get('ovrs_pdno', '')           # 종목코드
             name = stock.get('ovrs_item_name', '')        # 종목명
-            qty = stock.get('ovrs_cblc_qty', '0')         # 잔고수량
+            qty = stock.get('ord_psbl_qty', '0')          # 주문가능수량
             avg_price = stock.get('pchs_avg_pric', '0')   # 매입평균가격
-            current_price = stock.get('now_pric2', '0')   # 현재가
-            eval_amt = stock.get('ovrs_stck_evlu_amt', '0')  # 해외주식평가금액
-            profit_loss = stock.get('evlu_pfls_amt', '0')    # 평가손익금액
+            current_price = stock.get('now_pric2', '0')         # 현재가
+            eval_amt = stock.get('frcr_evlu_amt2', '0')      # 외화평가금액2
+            profit_loss = stock.get('frcr_evlu_pfls_amt', '0')  # 외화평가손익금액
             profit_rate = stock.get('evlu_pfls_rt', '0')     # 평가손익율
             
             # 손익에 따른 이모지

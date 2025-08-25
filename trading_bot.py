@@ -461,6 +461,9 @@ RSI: {rsi:.1f}
         for ticker, strategy in self.strategies.items():
             rsi_info.append(f"{ticker}: {strategy.rsi_oversold}/{strategy.rsi_overbought}")
         
+        # 장 시작시 보유 종목 현황 알림
+        self.sendPortfolioStatus()
+        
         # 시작 알림
         start_msg = f"""[시작] RSI 다중 종목 자동매매 봇
 종목: {', '.join(ticker_names)}
@@ -515,6 +518,86 @@ RSI 임계값: {", ".join(rsi_info)}
         
         self.logger.info("다중 종목 매매 봇이 종료되었습니다.")
     
+    def sendPortfolioStatus(self):
+        """현재 보유 종목 현황을 텔레그램으로 전송"""
+        try:
+            self.logger.info("보유 종목 현황 조회 시작")
+            
+            # 미국 시장 보유 종목 조회
+            balance_result = self.kis_account.getOverseasPresentBalance(
+                wcrc_frcr_dvsn="02",  # 외화
+                natn_cd="840",        # 미국
+                tr_mket_cd="00",      # 전체 시장
+                inqr_dvsn_cd="00"     # 전체
+            )
+            
+            stocks = balance_result.get('stocks', [])
+            summary = balance_result.get('summary', {})
+            
+            if not stocks:
+                message = "📊 <b>장 시작 알림</b>\n\n현재 보유 종목이 없습니다."
+                self.telegram.sendMessage(message)
+                return
+            
+            # 메시지 생성
+            message = self._formatPortfolioMessage(stocks, summary)
+            
+            # 텔레그램 전송
+            self.telegram.sendMessage(message)
+            self.logger.info(f"보유 종목 현황 텔레그램 전송 완료: {len(stocks)}개 종목")
+            
+        except Exception as e:
+            error_msg = f"보유 종목 현황 조회 중 오류: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            self.telegram.sendMessage(f"❌ <b>오류 발생</b>\n{error_msg}")
+    
+    def _formatPortfolioMessage(self, stocks, summary):
+        """보유 종목 정보를 텔레그램 메시지 포맷으로 변환"""
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        message = f"📊 <b>장 시작 알림</b>\n"
+        message += f"🕘 {current_time}\n\n"
+        
+        # 계좌 요약 정보
+        if summary:
+            total_eval_amt = summary.get('tot_evlu_pfls_amt', '0')  # 총평가손익금액
+            total_eval_rate = summary.get('evlu_pfls_rt', '0')     # 평가손익율
+            total_purchase_amt = summary.get('pchs_amt_smtl_amt', '0')  # 매입금액합계
+            total_eval_value = summary.get('evlu_amt_smtl_amt', '0')    # 평가금액합계
+            
+            message += f"💰 <b>계좌 요약</b>\n"
+            message += f"매입금액: ${float(total_purchase_amt):,.2f}\n"
+            message += f"평가금액: ${float(total_eval_value):,.2f}\n"
+            message += f"평가손익: ${float(total_eval_amt):,.2f}\n"
+            message += f"수익률: {float(total_eval_rate):+.2f}%\n\n"
+        
+        # 보유 종목별 상세 정보
+        message += f"📈 <b>보유 종목 ({len(stocks)}개)</b>\n\n"
+        
+        for i, stock in enumerate(stocks, 1):
+            ticker = stock.get('ovrs_pdno', '')           # 종목코드
+            name = stock.get('ovrs_item_name', '')        # 종목명
+            qty = stock.get('ovrs_cblc_qty', '0')         # 잔고수량
+            avg_price = stock.get('pchs_avg_pric', '0')   # 매입평균가격
+            current_price = stock.get('now_pric2', '0')   # 현재가
+            eval_amt = stock.get('ovrs_stck_evlu_amt', '0')  # 해외주식평가금액
+            profit_loss = stock.get('evlu_pfls_amt', '0')    # 평가손익금액
+            profit_rate = stock.get('evlu_pfls_rt', '0')     # 평가손익율
+            
+            # 손익에 따른 이모지
+            profit_emoji = "🔴" if float(profit_loss) < 0 else "🔵" if float(profit_loss) > 0 else "⚫"
+            
+            message += f"{profit_emoji} <b>{ticker}</b> ({name[:15]}{'...' if len(name) > 15 else ''})\n"
+            message += f"보유: {int(float(qty)):,}주\n"
+            message += f"매입가: ${float(avg_price):.2f} → 현재가: ${float(current_price):.2f}\n"
+            message += f"평가금액: ${float(eval_amt):,.2f}\n"
+            message += f"평가손익: ${float(profit_loss):,.2f} ({float(profit_rate):+.2f}%)\n"
+            
+            if i < len(stocks):  # 마지막 종목이 아니면 구분선 추가
+                message += "─────────────────\n"
+        
+        return message
+
     def getBotStatus(self):
         """봇 현재 상태 반환"""
         strategies_status = {}

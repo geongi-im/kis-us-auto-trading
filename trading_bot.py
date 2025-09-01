@@ -533,16 +533,9 @@ RSI: {rsi:.1f}
             
             stocks = balance_result.get('stocks', [])
             summary = balance_result.get('summary', {})
-            
-            if not stocks:
-                message = "📊 <b>장 시작 알림</b>\n\n현재 보유 종목이 없습니다."
-                self.telegram.sendMessage(message)
-                return
-            
+                                       
             # 메시지 생성
             message = self._formatPortfolioMessage(stocks, summary)
-            
-            # 텔레그램 전송
             self.telegram.sendMessage(message)
             self.logger.info(f"보유 종목 현황 텔레그램 전송 완료: {len(stocks)}개 종목")
             
@@ -557,6 +550,10 @@ RSI: {rsi:.1f}
         
         message = f"📊 <b>장 시작 알림</b>\n"
         message += f"🕘 {current_time}\n\n"
+
+        if not stocks or True:
+            message += "현재 보유 종목이 없습니다."
+            return message
         
         # 계좌 요약 정보 (summary가 있는 경우만)
         if summary:
@@ -595,12 +592,13 @@ RSI: {rsi:.1f}
             
             message += f"{profit_emoji} <b>{ticker}</b> ({name[:15]}{'...' if len(name) > 15 else ''})\n"
             message += f"보유: {int(float(qty)):,}주\n"
-            message += f"매입가: ${float(avg_price):.2f} → 현재가: ${float(current_price):.2f}\n"
-            message += f"평가금액: ${float(eval_amt):,.2f}\n"
-            message += f"평가손익: ${float(profit_loss):,.2f} ({float(profit_rate):+.2f}%)\n"
+            message += f"매입가: ${float(avg_price):.2f}\n"
+            message += f"현재가: ${float(current_price):.2f}\n"
+            message += f"평가손익: ${float(profit_loss):,.2f}\n"
+            message += f"수익률: {float(profit_rate):+.2f}%\n"
             
-            if i < len(stocks):  # 마지막 종목이 아니면 구분선 추가
-                message += "─────────────────\n"
+            if i < len(stocks):  # 마지막 종목이 아니면 개행 추가
+                message += "\n"
         
         return message
 

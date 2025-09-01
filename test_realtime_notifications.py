@@ -126,6 +126,15 @@ def check_environment():
         print(f"누락된 환경변수: {', '.join(missing_vars)}")
         return False
     
+    # HTS_ID 체크 및 안내
+    hts_id = os.getenv("HTS_ID")
+    if not hts_id:
+        print("권장사항: HTS_ID 환경변수를 설정하면 더 정확한 체결통보를 받을 수 있습니다.")
+        print("예시: HTS_ID=YOUR_HTS_ID")
+        print("현재는 기본값 'CLAUDE_BOT'을 사용합니다.")
+    else:
+        print(f"HTS_ID 설정됨: {hts_id}")
+    
     return True
 
 

@@ -144,13 +144,14 @@ class KisWebSocket(KisBase):
                 
                 if tr_id == "PINGPONG":
                     await self.handle_pingpong(message)
-                elif tr_id in ["H0GSCNI0", "H0GSCNI9"]:
+                elif tr_id in ["H0GSCNI0", "H0GSCNI9"] or tr_id == "(null)":
                     await self.handle_subscription_response(json_data)
                 else:
                     self.logger.debug(f"기타 메시지 수신: {message[:100]}...")
                     
         except Exception as e:
             self.logger.error(f"메시지 처리 오류: {e}")
+            self.logger.error(f"원본 메시지: {message}")
     
     async def handle_execution_notification(self, message: str):
         """체결통보 데이터 처리"""
@@ -217,7 +218,10 @@ class KisWebSocket(KisBase):
         try:
             rt_cd = json_data.get("body", {}).get("rt_cd")
             msg = json_data.get("body", {}).get("msg1", "")
+            msg_cd = json_data.get("body", {}).get("msg_cd", "")
             tr_id = json_data.get("header", {}).get("tr_id")
+            
+            self.logger.info(f"구독 응답 수신 - TR_ID: {tr_id}, RT_CD: {rt_cd}, MSG_CD: {msg_cd}")
             
             if rt_cd == '0':  # 성공
                 self.logger.info(f"구독 성공 ({tr_id}): {msg}")
@@ -231,12 +235,20 @@ class KisWebSocket(KisBase):
                     
             elif rt_cd == '1':  # 에러
                 if msg != 'ALREADY IN SUBSCRIBE':
-                    self.logger.error(f"구독 실패 ({tr_id}): {msg}")
+                    self.logger.error(f"구독 실패 ({tr_id}): {msg} (MSG_CD: {msg_cd})")
                 else:
                     self.logger.info(f"이미 구독 중 ({tr_id})")
+            elif rt_cd == '9':  # 시스템 오류
+                self.logger.error(f"시스템 오류 ({tr_id}): {msg} (MSG_CD: {msg_cd})")
+                # HTS_ID 관련 오류일 가능성이 높음
+                if "OPSP0017" in msg_cd:
+                    self.logger.error("HTS_ID 설정 오류일 가능성이 있습니다. 환경변수 HTS_ID를 확인해주세요.")
+            else:
+                self.logger.warning(f"알 수 없는 응답 코드 ({tr_id}): RT_CD={rt_cd}, MSG={msg}")
                     
         except Exception as e:
             self.logger.error(f"구독 응답 처리 오류: {e}")
+            self.logger.error(f"응답 데이터: {json_data}")
     
     async def handle_pingpong(self, message: str):
         """PING-PONG 처리"""

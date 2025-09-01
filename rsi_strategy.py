@@ -85,8 +85,8 @@ class RSIStrategy:
                  rsi_period: int = 14,
                  rsi_oversold: float = 30.0,
                  rsi_overbought: float = 70.0,
-                 buy_percentage: float = 0.05,
-                 sell_percentage: float = 0.05):
+                 buy_rate: float = 0.05,
+                 sell_rate: float = 0.05):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -96,8 +96,8 @@ class RSIStrategy:
         self.rsi_period = rsi_period
         self.rsi_oversold = rsi_oversold
         self.rsi_overbought = rsi_overbought
-        self.buy_percentage = buy_percentage
-        self.sell_percentage = sell_percentage
+        self.buy_rate = buy_rate
+        self.sell_rate = sell_rate
         
         # 가격 히스토리 및 RSI 계산기
         self.price_history = PriceHistory(max_length=200)

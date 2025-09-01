@@ -10,6 +10,7 @@ from rsi_strategy import RSIStrategy
 from utils.telegram_util import TelegramUtil
 from utils.logger_util import LoggerUtil
 from utils.datetime_util import DateTimeUtil
+import holidays
 
 
 class TradingBot:
@@ -36,6 +37,10 @@ class TradingBot:
         # 환경변수에서 RSI 설정 가져오기
         rsi_oversold = int(os.getenv("RSI_OVERSOLD"))
         rsi_overbought = int(os.getenv("RSI_OVERBOUGHT"))
+
+        # 매수/매도 거래 비중 가져오기
+        buy_rate = float(os.getenv("BUY_RATE"))
+        sell_rate = float(os.getenv("SELL_RATE"))
         
         # 각 종목별 RSI 전략 생성
         self.strategies = {}
@@ -45,7 +50,9 @@ class TradingBot:
                 ticker=ticker, 
                 market=market_code, 
                 rsi_oversold=rsi_oversold, 
-                rsi_overbought=rsi_overbought
+                rsi_overbought=rsi_overbought,
+
+
             )
         
         # 텔레그램 유틸
@@ -111,6 +118,22 @@ class TradingBot:
         
         return False
     
+    def isUSMarketHoliday(self):
+        """미국 주식 시장 휴장일인지 확인 (미국 현지시간 기준)"""
+        us_now = DateTimeUtil.get_us_now()
+        us_date = us_now.date()
+        
+        # 미국 주식시장 휴장일 체크
+        us_holidays = holidays.US()
+        
+        # NYSE/NASDAQ 휴장일인지 확인
+        if us_date in us_holidays:
+            holiday_name = us_holidays[us_date]
+            self.logger.info(f"오늘은 미국 주식시장 휴장일입니다: {holiday_name}")
+            return True, holiday_name
+        
+        return False, None
+    
     def getCashBalance(self, market):
         """현재 매수가능현금 조회"""
         try:
@@ -169,7 +192,7 @@ class TradingBot:
     def calculateBuyQuantity(self, ticker, cash_balance: float, current_price: float):
         """매수 수량 계산 (현금의 5%)"""
         strategy = self.strategies[ticker]
-        buy_amount = cash_balance * strategy.buy_percentage
+        buy_amount = cash_balance * strategy.buy_rate
         quantity = int(buy_amount / current_price)
         return max(1, quantity)  # 최소 1주
     
@@ -177,7 +200,7 @@ class TradingBot:
         """매도 수량 계산 (보유량의 5%)"""
         strategy = self.strategies[ticker]
         total_quantity = stock_balance['quantity']
-        sell_quantity = int(total_quantity * strategy.sell_percentage)
+        sell_quantity = int(total_quantity * strategy.sell_rate)
         return max(1, min(sell_quantity, total_quantity))  # 최소 1주, 최대 보유량
     
     def getLastBuyOrderTime(self, ticker):
@@ -450,6 +473,14 @@ RSI: {rsi:.1f}
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
         
+        # 미국 주식시장 휴장일 체크
+        is_holiday, holiday_name = self.isUSMarketHoliday()
+        if is_holiday:
+            holiday_msg = f"[휴장] 오늘은 미국 주식시장 휴장일입니다.\n휴일: {holiday_name}"
+            self.logger.info(holiday_msg)
+            self.telegram.sendMessage(holiday_msg)
+            return
+        
         # 모든 종목에 대한 과거 데이터 로드
         for ticker, strategy in self.strategies.items():
             if not strategy.loadHistoricalData():
@@ -551,7 +582,7 @@ RSI: {rsi:.1f}
         message = f"📊 <b>장 시작 알림</b>\n"
         message += f"🕘 {current_time}\n\n"
 
-        if not stocks or True:
+        if not stocks:
             message += "현재 보유 종목이 없습니다."
             return message
         

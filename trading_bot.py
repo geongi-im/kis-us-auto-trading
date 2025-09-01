@@ -51,8 +51,8 @@ class TradingBot:
                 market=market_code, 
                 rsi_oversold=rsi_oversold, 
                 rsi_overbought=rsi_overbought,
-
-
+                buy_rate=buy_rate,
+                sell_rate=sell_rate
             )
         
         # 텔레그램 유틸

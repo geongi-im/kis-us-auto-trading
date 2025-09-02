@@ -253,9 +253,7 @@ class KisWebSocket(KisBase):
     async def handle_pingpong(self, message: str):
         """PING-PONG 처리"""
         try:
-            self.logger.debug(f"PING 수신: {message}")
             await self.websocket.pong(message)
-            self.logger.debug(f"PONG 전송: {message}")
         except Exception as e:
             self.logger.error(f"PING-PONG 처리 오류: {e}")
     

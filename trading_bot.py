@@ -369,9 +369,10 @@ class TradingBot:
                 
                 # 텔레그램 알림
                 rsi = strategy.getCurrentRsi()
-                message = f"""[매수] {ticker} 주문 완료
+                message = f"""<b>[매수] 주문완료</b>
+종목코드: {ticker}
 RSI: {rsi:.1f}
-매수량: {quantity}주 (${quantity * current_price:.2f})
+수량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
 현금잔고: ${cash_balance:.2f}
 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
@@ -414,9 +415,10 @@ RSI: {rsi:.1f}
                 # 텔레그램 알림
                 rsi = strategy.getCurrentRsi()
                 profit_loss = stock_balance['profit_loss']
-                message = f"""[매도] {ticker} 주문 완료
+                message = f"""<b>[매도] 주문완료</b>
+종목코드: {ticker}
 RSI: {rsi:.1f}
-매도량: {quantity}주 (${quantity * current_price:.2f})
+수량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
 평가손익: ${profit_loss:.2f}
 남은수량: {stock_balance['quantity'] - quantity}주
@@ -686,62 +688,40 @@ RSI: {rsi:.1f}
             
             # 매수/매도 구분
             trade_type = ""
-            trade_emoji = ""
             if buy_sell_gb == '02':  # 매수
                 trade_type = "매수"
-                trade_emoji = "🟢"
             elif buy_sell_gb == '01':  # 매도
                 trade_type = "매도"
-                trade_emoji = "🔴"
             else:
                 trade_type = f"주문({buy_sell_gb})"
-                trade_emoji = "⚪"
             
             # 체결 금액 계산
             try:
                 qty = float(execution_qty)
-                price = float(execution_price)
+                price = float(int(execution_price)/10000)
                 total_amount = qty * price
             except:
                 qty = 0
                 price = 0
                 total_amount = 0
-            
-            # 현재 RSI 정보 가져오기 (해당 종목이 거래 대상인 경우)
-            rsi_info = ""
-            if ticker in self.strategies:
-                strategy = self.strategies[ticker]
-                current_rsi = strategy.getCurrentRsi()
-                if current_rsi is not None:
-                    if current_rsi <= strategy.rsi_oversold:
-                        rsi_info = f"📈 RSI: {current_rsi:.1f} (과매도)"
-                    elif current_rsi >= strategy.rsi_overbought:
-                        rsi_info = f"📉 RSI: {current_rsi:.1f} (과매수)"
-                    else:
-                        rsi_info = f"📊 RSI: {current_rsi:.1f}"
-            
+                        
             # 로거 출력
-            self.logger.info(f"📈 종목: {ticker} ({stock_name})")
-            self.logger.info(f"💰 {trade_type}: {execution_qty}주 @ ${execution_price}")
-            self.logger.info(f"💵 체결금액: ${total_amount:.2f}")
-            self.logger.info(f"⏰ 체결시간: {execution_time}")
-            self.logger.info(f"🔢 주문번호: {order_no}")
-            self.logger.info(f"✅ 체결여부: {execution_yn}")
+            self.logger.info(f"종목: {ticker} ({stock_name})")
+            self.logger.info(f"{trade_type}: {execution_qty}주 @ ${execution_price}")
+            self.logger.info(f"체결금액: ${total_amount:.2f}")
+            self.logger.info(f"체결시간: {execution_time}")
+            self.logger.info(f"주문번호: {order_no}")
+            self.logger.info(f"체결여부: {execution_yn}")
             self.logger.info("===============================")
-            
-            # 텔레그램 메시지 생성
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             # 체결 완료인 경우에만 알림 전송
             if execution_yn == '2':  # 체결 완료
-                telegram_message = f"""🎉 <b>[체결완료] {ticker}</b>
-{trade_emoji} <b>{trade_type}</b> {execution_qty}주 @ ${execution_price}
-💰 체결금액: ${total_amount:,.2f}
-⏰ {execution_time} | 한국시각: {current_time}
-🔢 주문번호: {order_no}"""
-                
-                if rsi_info:
-                    telegram_message += f"\n{rsi_info}"
+                telegram_message = f"""<b>[{trade_type}] 체결완료</b>
+종목코드: {ticker}
+주문번호: {order_no}                
+수량: {qty}주 (${total_amount:,.2f})
+현재가: ${price:.2f}
+시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                 
                 # 텔레그램 전송
                 self.telegram.sendMessage(telegram_message)

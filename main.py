@@ -78,9 +78,6 @@ async def main_async():
     trading_tickers = parseTradingTickers()
     logger.info(f"거래 종목: {', '.join([f'{ticker}({market})' for ticker, market in trading_tickers.items()])}")
     
-    # RSI 자동매매 봇 시작
-    logger.info("RSI 기반 다중 종목 자동매매 봇을 시작합니다...")
-    
     # 매매 봇 생성 및 시작
     trading_bot = TradingBot(trading_tickers)
     

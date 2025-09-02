@@ -91,8 +91,8 @@ async def connect():
         print(f"approval_key: {g_approval_key}")
 
         # 웹소켓 URL
-        # url = 'ws://ops.koreainvestment.com:31000' # 모의투자계좌
-        url = 'ws://ops.koreainvestment.com:21000' # 실전투자계좌
+        url = 'ws://ops.koreainvestment.com:31000' # 모의투자계좌
+        # url = 'ws://ops.koreainvestment.com:21000' # 실전투자계좌
 
         # 해외주식 실시간 지연체결가 수신 설정
         # HDFSCNT0: 해외주식 실시간 지연체결가

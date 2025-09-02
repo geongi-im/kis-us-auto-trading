@@ -7,6 +7,7 @@ from typing import Optional, Dict
 from kis_order import KisOrder
 from kis_account import KisAccount
 from kis_base import KisBase
+from kis_websocket import KisWebSocket
 from rsi_strategy import RSIStrategy
 from utils.telegram_util import TelegramUtil
 from utils.logger_util import LoggerUtil
@@ -15,7 +16,7 @@ import holidays
 
 
 class TradingBot:
-    """RSI 기반 다중 종목 자동매매 봇"""
+    """한국투자증권 해외 주식 자동매매 봇"""
     
     def __init__(self, trading_tickers: dict):
         
@@ -35,6 +36,10 @@ class TradingBot:
         self.kis_order = KisOrder()
         self.kis_account = KisAccount()
         self.kis_base = KisBase()
+        
+        # WebSocket 객체 (체결통보용)
+        self.kis_websocket = KisWebSocket()
+        self.websocket_task = None
         
         # 환경변수에서 RSI 설정 가져오기
         rsi_oversold = int(os.getenv("RSI_OVERSOLD"))
@@ -514,6 +519,16 @@ RSI: {rsi:.1f}
         # 장 시작시 보유 종목 현황 알림
         self.sendPortfolioStatus()
         
+        # WebSocket 체결통보 연결 시작
+        try:
+            self.kis_websocket.set_execution_callback(self.handle_execution_notification)
+            self.websocket_task = asyncio.create_task(self.kis_websocket.connect())
+            self.logger.info("WebSocket 체결통보 연결 시작")
+            await asyncio.sleep(2)  # 연결 안정화 대기
+        except Exception as e:
+            self.logger.error(f"WebSocket 연결 실패: {e}")
+            self.logger.warning("체결통보 없이 매매봇만 실행합니다")
+        
         try:
             while self.is_running:
                 # 자동 종료 시간 체크
@@ -551,6 +566,21 @@ RSI: {rsi:.1f}
     async def stopTrading(self):
         """매매 봇 종료"""
         self.is_running = False
+        
+        # WebSocket 연결 정리
+        try:
+            if self.kis_websocket and self.kis_websocket.is_connected:
+                await self.kis_websocket.disconnect()
+                self.logger.info("WebSocket 연결 해제 완료")
+                
+            if self.websocket_task and not self.websocket_task.done():
+                self.websocket_task.cancel()
+                try:
+                    await self.websocket_task
+                except asyncio.CancelledError:
+                    self.logger.info("WebSocket 태스크 취소 완료")
+        except Exception as e:
+            self.logger.error(f"WebSocket 정리 중 오류: {e}")
         
         if self.start_time:
             runtime = DateTimeUtil.get_us_now() - self.start_time
@@ -637,6 +667,99 @@ RSI: {rsi:.1f}
                 message += "\n"
         
         return message
+
+    async def handle_execution_notification(self, execution_info: dict):
+        """체결통보 처리 함수"""
+        try:
+            self.logger.info("🎉 === 실시간 체결통보 수신 ===")
+            
+            # 체결통보 데이터 파싱
+            ticker = execution_info.get('ticker', 'N/A')
+            buy_sell_gb = execution_info.get('buy_sell_gb', '')
+            execution_qty = execution_info.get('execution_qty', '0')
+            execution_price = execution_info.get('execution_price', '0')
+            execution_time = execution_info.get('execution_time', 'N/A')
+            order_no = execution_info.get('order_no', 'N/A')
+            execution_yn = execution_info.get('execution_yn', 'N/A')
+            account_no = execution_info.get('account_no', 'N/A')
+            stock_name = execution_info.get('stock_name', 'N/A')
+            
+            # 매수/매도 구분
+            trade_type = ""
+            trade_emoji = ""
+            if buy_sell_gb == '02':  # 매수
+                trade_type = "매수"
+                trade_emoji = "🟢"
+            elif buy_sell_gb == '01':  # 매도
+                trade_type = "매도"
+                trade_emoji = "🔴"
+            else:
+                trade_type = f"주문({buy_sell_gb})"
+                trade_emoji = "⚪"
+            
+            # 체결 금액 계산
+            try:
+                qty = float(execution_qty)
+                price = float(execution_price)
+                total_amount = qty * price
+            except:
+                qty = 0
+                price = 0
+                total_amount = 0
+            
+            # 현재 RSI 정보 가져오기 (해당 종목이 거래 대상인 경우)
+            rsi_info = ""
+            if ticker in self.strategies:
+                strategy = self.strategies[ticker]
+                current_rsi = strategy.getCurrentRsi()
+                if current_rsi is not None:
+                    if current_rsi <= strategy.rsi_oversold:
+                        rsi_info = f"📈 RSI: {current_rsi:.1f} (과매도)"
+                    elif current_rsi >= strategy.rsi_overbought:
+                        rsi_info = f"📉 RSI: {current_rsi:.1f} (과매수)"
+                    else:
+                        rsi_info = f"📊 RSI: {current_rsi:.1f}"
+            
+            # 로거 출력
+            self.logger.info(f"📈 종목: {ticker} ({stock_name})")
+            self.logger.info(f"💰 {trade_type}: {execution_qty}주 @ ${execution_price}")
+            self.logger.info(f"💵 체결금액: ${total_amount:.2f}")
+            self.logger.info(f"⏰ 체결시간: {execution_time}")
+            self.logger.info(f"🔢 주문번호: {order_no}")
+            self.logger.info(f"✅ 체결여부: {execution_yn}")
+            self.logger.info("===============================")
+            
+            # 텔레그램 메시지 생성
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 체결 완료인 경우에만 알림 전송
+            if execution_yn == '2':  # 체결 완료
+                telegram_message = f"""🎉 <b>[체결완료] {ticker}</b>
+{trade_emoji} <b>{trade_type}</b> {execution_qty}주 @ ${execution_price}
+💰 체결금액: ${total_amount:,.2f}
+⏰ {execution_time} | 한국시각: {current_time}
+🔢 주문번호: {order_no}"""
+                
+                if rsi_info:
+                    telegram_message += f"\n{rsi_info}"
+                
+                # 텔레그램 전송
+                self.telegram.sendMessage(telegram_message)
+                self.logger.info("📤 체결통보 텔레그램 메시지 전송 완료")
+            
+            elif execution_yn == '1':  # 접수
+                self.logger.info(f"📝 {ticker} 주문 접수됨 - 체결 대기 중")
+            else:
+                self.logger.info(f"ℹ️ {ticker} 기타 상태: {execution_yn}")
+                
+        except Exception as e:
+            error_msg = f"체결통보 처리 중 오류: {e}"
+            self.logger.error(error_msg)
+            self.logger.error(traceback.format_exc())
+            try:
+                self.telegram.sendMessage(f"❌ <b>체결통보 처리 오류</b>\n{error_msg}")
+            except:
+                pass  # 텔레그램 전송 실패시에도 계속 진행
 
     def getBotStatus(self):
         """봇 현재 상태 반환"""

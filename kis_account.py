@@ -33,7 +33,7 @@ class KisAccount(KisBase):
     def getBalance(self, market="NASD", currency=""):
         """잔고 조회
         Args:
-            market (str): 거래소 코드
+            market (str): 거래소 코드 ([모의] NASD:나스닥, NYSE:뉴욕, AMEX:아멕스 / [실전] NASD:미국전체, NAS:나스닥, NYSE:뉴욕, AMEX:아멕스)
             currency (str): 통화코드 (USD, HKD 등)
             
         Returns:
@@ -335,7 +335,7 @@ class KisAccount(KisBase):
                 else:
                     break
             
-            self.logger.info(f"해외주식 주문내역 전체 조회 완료: 총 {len(all_data)}건, {page_count}페이지")
+            self.logger.info(f"해외주식 주문내역 전체 조회 완료: 종목 {ticker}, 총 {len(all_data)}건, {page_count}페이지")
             return all_data
         
         # 단일 페이지 조회 모드
@@ -374,9 +374,9 @@ class KisAccount(KisBase):
         tr_cont = result.get('tr_cont', '')
         has_more = tr_cont in ['F', 'M']  # F or M: 다음 데이터 있음, D or E: 마지막 데이터
         
-        self.logger.info(f"해외주식 주문내역 조회: {len(data)}건 조회, tr_cont: {tr_cont}, 연속조회 가능: {has_more}")
-        if has_more:
-            self.logger.info(f"연속조회키: {next_ctx_area_nk200[:20]}...")
+        # self.logger.info(f"해외주식 주문내역 조회: {len(data)}건 조회, tr_cont: {tr_cont}, 연속조회 가능: {has_more}")
+        # if has_more:
+            # self.logger.info(f"연속조회키: {next_ctx_area_nk200[:20]}...")
         
         return {
             'data': data,

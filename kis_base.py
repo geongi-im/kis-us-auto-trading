@@ -98,3 +98,30 @@ class KisBase:
             self.logger.error(f"API 요청 중 오류 발생: {e}")
             self.logger.error(traceback.format_exc())
             raise e 
+    
+    def changeMarketCode(self, market, length=3):
+        """ 거래소 코드 포맷 변경 
+        Args:
+            market (str): 거래소 코드
+            length (int): 거래소 코드 길이
+        Returns:
+            str: 거래소 코드
+        """
+        market_map_3 = {
+            "NASDAQ": "NAS",
+            "NYSE": "NYS",
+            "AMEX": "AMS"
+        }
+
+        market_map_4 = {
+            "NASDAQ": "NASD",
+            "NYSE": "NYSE",
+            "AMEX": "AMEX"
+        }
+        
+        if length == 3:
+            return market_map_3.get(market, market)
+        elif length == 4:
+            return market_map_4.get(market, market)
+        else:
+            return market

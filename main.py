@@ -28,7 +28,7 @@ def parseTradingTickers():
         return trading_tickers
         
     except ValueError as e:
-        raise Exception(f"TRADING_TICKERS 형식이 잘못되었습니다. 올바른 형식: NASD:TQQQ,NYSE:NVDA - 오류: {e}")
+        raise Exception(f"TRADING_TICKERS 형식이 잘못되었습니다. 올바른 형식: NASDAQ:TQQQ,NYSE:NVDA - 오류: {e}")
     except Exception as e:
         raise Exception(f"TRADING_TICKERS 파싱 중 오류 발생: {e}")
 

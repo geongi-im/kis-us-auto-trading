@@ -6,7 +6,7 @@ class KisPrice(KisBase):
     def getPrice(self, market, ticker):
         """현재가 조회
         Args:
-            market (str): 거래소 코드 (NAS:나스닥, NYS:뉴욕 등)
+            market (str): 거래소 코드 (NAS:나스닥, NYS:뉴욕, AMS:아멕스 등)
             ticker (str): 종목코드
             
         Returns:

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from kis_websocket import KisWebSocket
 from kis_order import KisOrder
 from kis_price import KisPrice
+from kis_base import KisBase
 from utils.logger_util import LoggerUtil
 
 
@@ -14,6 +15,7 @@ class OrderExecutionTester:
         self.logger = LoggerUtil().get_logger()
         self.kis_order = KisOrder()
         self.kis_price = KisPrice()
+        self.kis_base = KisBase()
         self.received_notifications = []
         
     async def execution_notification_handler(self, execution_info: dict):
@@ -42,7 +44,8 @@ class OrderExecutionTester:
             self.logger.info(f"🚀 {ticker} 테스트 주문 실행 준비")
             
             # 현재가 조회
-            price_info = self.kis_price.getPrice(market, ticker)
+            parse_market = self.kis_base.changeMarketCode(market)
+            price_info = self.kis_price.getPrice(parse_market, ticker)
             current_price = float(price_info.get('last', 0))
             
             if current_price <= 0:
@@ -99,8 +102,12 @@ class OrderExecutionTester:
             if ws_manager.is_connected:
                 self.logger.info("🔗 WebSocket 연결 완료, 테스트 주문 실행")
                 
-                # 테스트 주문 실행
-                order_success = await self.execute_test_order()
+                # 테스트 주문 실행 NYSE:O,AMEX:XLF,AMEX:GLD,NYSE:PAXS
+                # order_success = await self.execute_test_order("AAPL", "NAS")
+                # order_success = await self.execute_test_order("O", "NYSE")
+                # order_success = await self.execute_test_order("XLF", "AMEX")
+                order_success = await self.execute_test_order("GLD", "AMEX")
+                order_success = await self.execute_test_order("PAXS", "NYSE")
                 
                 if order_success:
                     self.logger.info("⏳ 60초 동안 체결통보 대기 중...")

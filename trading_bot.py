@@ -6,6 +6,7 @@ from datetime import datetime, time
 from typing import Optional, Dict
 from kis_order import KisOrder
 from kis_account import KisAccount
+from kis_base import KisBase
 from rsi_strategy import RSIStrategy
 from utils.telegram_util import TelegramUtil
 from utils.logger_util import LoggerUtil
@@ -33,6 +34,7 @@ class TradingBot:
         # KIS API 객체들
         self.kis_order = KisOrder()
         self.kis_account = KisAccount()
+        self.kis_base = KisBase()
         
         # 환경변수에서 RSI 설정 가져오기
         rsi_oversold = int(os.getenv("RSI_OVERSOLD"))
@@ -45,10 +47,10 @@ class TradingBot:
         # 각 종목별 RSI 전략 생성
         self.strategies = {}
         for ticker, market in trading_tickers.items():
-            market_code = "NAS" if market == "NASD" else market  # NASD -> NAS 변환
+            parse_market = self.kis_base.changeMarketCode(market)
             self.strategies[ticker] = RSIStrategy(
                 ticker=ticker, 
-                market=market_code, 
+                market=parse_market, 
                 rsi_oversold=rsi_oversold, 
                 rsi_overbought=rsi_overbought,
                 buy_rate=buy_rate,
@@ -177,7 +179,8 @@ class TradingBot:
         """특정 종목 기준 매수 가능 금액 조회"""
         try:
             # getOverseasPurchaseAmount로 매수가능한 외화금액 조회
-            balance_info = self.kis_account.getOverseasPurchaseAmount(market=market, price=price, ticker=ticker)
+            parse_market = self.kis_base.changeMarketCode(market, length=4)
+            balance_info = self.kis_account.getOverseasPurchaseAmount(market=parse_market, price=price, ticker=ticker)
             
             # 매수가능현금 (USD)
             cash_balance = float(balance_info.get('ord_psbl_frcr_amt', '0'))
@@ -345,13 +348,14 @@ class TradingBot:
             strategy = self.strategies[ticker]
             cash_balance = self.getPurchaseAmount(ticker, market, current_price)
             quantity = self.calculateBuyQuantity(ticker, cash_balance, current_price)
+            parse_market = self.kis_base.changeMarketCode(market, length=4)
             
             # 매수 주문 실행
             result = self.kis_order.buyOrder(
                 ticker=ticker,
                 quantity=quantity,
                 price=current_price,
-                market=market,
+                market=parse_market,
                 ord_dvsn="00"  # 지정가 주문
             )
             
@@ -388,13 +392,14 @@ RSI: {rsi:.1f}
                 return False
             
             quantity = self.calculateSellQuantity(ticker, stock_balance)
+            parse_market = self.kis_base.changeMarketCode(market, length=4)
             
             # 매도 주문 실행
             result = self.kis_order.sellOrder(
                 ticker=ticker,
                 quantity=quantity,
                 price=current_price,
-                market=market,
+                market=parse_market,
                 ord_dvsn="00"  # 지정가 주문
             )
             
@@ -430,8 +435,8 @@ RSI: {rsi:.1f}
                 strategy = self.strategies[ticker]
                 
                 # 현재가 조회
-                market_code = "NAS" if market == "NASD" else market  # NASD -> NAS 변환
-                price_info = strategy.kis_price.getPrice(market_code, ticker)
+                parse_market = self.kis_base.changeMarketCode(market)
+                price_info = strategy.kis_price.getPrice(parse_market, ticker)
                 current_price = float(price_info.get('last', 0))
                 
                 if current_price <= 0:

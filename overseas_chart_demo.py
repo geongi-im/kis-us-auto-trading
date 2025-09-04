@@ -8,6 +8,7 @@ import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import pytz
 from kis_base import KisBase
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
@@ -57,11 +58,22 @@ def main():
         df = pd.DataFrame(chart_data)
         
         if len(df) > 0:
-            # 시간 컬럼 생성 (tymd + xhms)
-            df['datetime'] = pd.to_datetime(df['tymd'] + df['xhms'], format='%Y%m%d%H%M%S')
+            # 시간 컬럼 생성 (tymd + xhms) - 미국 동부 시간으로 파싱
+            df['datetime_us'] = pd.to_datetime(df['tymd'] + df['xhms'], format='%Y%m%d%H%M%S')
+            
+            # 미국 동부 시간으로 설정 후 한국 시간으로 변환
+            us_tz = pytz.timezone('US/Eastern')
+            kr_tz = pytz.timezone('Asia/Seoul')
+            
+            df['datetime_us'] = df['datetime_us'].dt.tz_localize(us_tz)
+            df['datetime_kr'] = df['datetime_us'].dt.tz_convert(kr_tz)
             
             # 필요한 컬럼만 선택
-            df_cleaned = df[['datetime', 'open', 'high', 'low', 'last', 'evol']].copy()
+            df_cleaned = df[['datetime_us', 'datetime_kr', 'open', 'high', 'low', 'last', 'evol']].copy()
+            
+            # 표시용 컬럼 추가 (timezone 정보 제거)
+            df_cleaned['us_time'] = df_cleaned['datetime_us'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            df_cleaned['kr_time'] = df_cleaned['datetime_kr'].dt.strftime('%Y-%m-%d %H:%M:%S')
             
             # 데이터 타입 변환
             numeric_cols = ['open', 'high', 'low', 'last', 'evol']
@@ -69,7 +81,7 @@ def main():
                 df_cleaned[col] = pd.to_numeric(df_cleaned[col], errors='coerce')
             
             # 최신 시간 순으로 정렬
-            df_cleaned = df_cleaned.sort_values('datetime', ascending=False).reset_index(drop=True)
+            df_cleaned = df_cleaned.sort_values('datetime_us', ascending=False).reset_index(drop=True)
             
             # MACD 계산
             df_with_macd = calculate_macd(df_cleaned)
@@ -80,7 +92,7 @@ def main():
             # 결과 출력
             print(f"\n{market}:{ticker} {time_frame}분봉 데이터 (최근 {len(df_with_macd)}개)")
             print("=" * 80)
-            print(df_with_macd[['datetime', 'last', 'macd', 'signal', 'histogram']].head(10).to_string(index=False))
+            print(df_with_macd[['us_time', 'kr_time', 'last', 'macd', 'signal', 'histogram']].head(10).to_string(index=False))
             print("=" * 80)
             
             # 골든크로스/데드크로스 출력
@@ -91,12 +103,14 @@ def main():
                 if not crosses['golden_cross'].empty:
                     print("\n[+] 골든크로스 발생 시점:")
                     for _, row in crosses['golden_cross'].iterrows():
-                        print(f"  시간: {row['datetime']}, 가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
+                        print(f"  미국시간: {row['us_time']}, 한국시간: {row['kr_time']}")
+                        print(f"  가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
                 
                 if not crosses['death_cross'].empty:
                     print("\n[-] 데드크로스 발생 시점:")
                     for _, row in crosses['death_cross'].iterrows():
-                        print(f"  시간: {row['datetime']}, 가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
+                        print(f"  미국시간: {row['us_time']}, 한국시간: {row['kr_time']}")
+                        print(f"  가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
             else:
                 print("\n[!] 분석 기간 내 골든크로스/데드크로스가 발생하지 않았습니다.")
             
@@ -109,8 +123,10 @@ def main():
             
             # 기본 통계 정보
             print(f"\n통계 정보:")
-            print(f"시작 시간: {df_with_macd['datetime'].iloc[-1]}")
-            print(f"종료 시간: {df_with_macd['datetime'].iloc[0]}")
+            print(f"시작 시간 (미국): {df_with_macd['us_time'].iloc[-1]}")
+            print(f"시작 시간 (한국): {df_with_macd['kr_time'].iloc[-1]}")
+            print(f"종료 시간 (미국): {df_with_macd['us_time'].iloc[0]}")
+            print(f"종료 시간 (한국): {df_with_macd['kr_time'].iloc[0]}")
             print(f"시가: ${df_with_macd['last'].iloc[-1]:.2f}")
             print(f"고가: ${df_with_macd['high'].max():.2f}")
             print(f"저가: ${df_with_macd['low'].min():.2f}")
@@ -170,6 +186,9 @@ def detect_macd_crosses(df):
     df['prev_macd'] = df['macd'].shift(1)
     df['prev_signal'] = df['signal'].shift(1)
     
+    # NaN 값 제거 (첫 번째 행)
+    df = df.dropna()
+    
     # 골든크로스: MACD가 시그널을 아래에서 위로 돌파
     golden_cross_condition = (
         (df['prev_macd'] <= df['prev_signal']) &  # 이전에는 MACD가 시그널 아래
@@ -184,6 +203,12 @@ def detect_macd_crosses(df):
     
     golden_crosses = df[golden_cross_condition].copy()
     death_crosses = df[death_cross_condition].copy()
+    
+    # 시간 순으로 정렬 (최신순)
+    if not golden_crosses.empty:
+        golden_crosses = golden_crosses.sort_values('datetime_us', ascending=False)
+    if not death_crosses.empty:
+        death_crosses = death_crosses.sort_values('datetime_us', ascending=False)
     
     return {
         'golden_cross': golden_crosses,

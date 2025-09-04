@@ -5,42 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
-
-class PriceHistory:
-    """가격 데이터 히스토리 관리 클래스"""
-    
-    def __init__(self, max_length: int = 100):
-        self.max_length = max_length
-        self.prices = []
-        self.timestamps = []
-    
-    def addPrice(self, price: float, timestamp: datetime = None):
-        """새로운 가격 데이터 추가"""
-        if timestamp is None:
-            timestamp = datetime.now()
-        
-        self.prices.append(price)
-        self.timestamps.append(timestamp)
-        
-        # 최대 길이 유지
-        if len(self.prices) > self.max_length:
-            self.prices.pop(0)
-            self.timestamps.pop(0)
-    
-    def getPrices(self):
-        """가격 리스트 반환"""
-        return self.prices.copy()
-    
-    def getDataframe(self):
-        """판다스 DataFrame으로 반환"""
-        return pd.DataFrame({
-            'timestamp': self.timestamps,
-            'close': self.prices
-        })
-    
-    def getLength(self):
-        """현재 저장된 데이터 길이"""
-        return len(self.prices)
+from utils.price_history import PriceHistory
 
 
 class MACDCalculator:

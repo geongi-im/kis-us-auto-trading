@@ -37,7 +37,7 @@ class PriceHistory:
             self.prices.pop(0)
             self.timestamps.pop(0)
     
-    def getPrices(self) -> List[float]:
+    def getPrices(self):
         """가격 리스트 반환
         
         Returns:
@@ -45,7 +45,7 @@ class PriceHistory:
         """
         return self.prices.copy()
     
-    def getTimestamps(self) -> List[datetime]:
+    def getTimestamps(self):
         """타임스탬프 리스트 반환
         
         Returns:
@@ -53,7 +53,7 @@ class PriceHistory:
         """
         return self.timestamps.copy()
     
-    def getDataframe(self) -> pd.DataFrame:
+    def getDataframe(self):
         """판다스 DataFrame으로 반환
         
         Returns:
@@ -64,7 +64,7 @@ class PriceHistory:
             'close': self.prices
         })
     
-    def getLength(self) -> int:
+    def getLength(self):
         """현재 저장된 데이터 길이
         
         Returns:
@@ -72,7 +72,7 @@ class PriceHistory:
         """
         return len(self.prices)
     
-    def getLatestPrice(self) -> Optional[float]:
+    def getLatestPrice(self):
         """최신 가격 반환
         
         Returns:
@@ -80,7 +80,7 @@ class PriceHistory:
         """
         return self.prices[-1] if self.prices else None
     
-    def getLatestTimestamp(self) -> Optional[datetime]:
+    def getLatestTimestamp(self):
         """최신 타임스탬프 반환
         
         Returns:
@@ -93,7 +93,7 @@ class PriceHistory:
         self.prices.clear()
         self.timestamps.clear()
     
-    def isEmpty(self) -> bool:
+    def isEmpty(self):
         """데이터가 비어있는지 확인
         
         Returns:
@@ -101,7 +101,7 @@ class PriceHistory:
         """
         return len(self.prices) == 0
     
-    def hasMinimumData(self, min_count: int) -> bool:
+    def hasMinimumData(self, min_count: int):
         """최소 필요 데이터 개수 확인
         
         Args:
@@ -112,7 +112,7 @@ class PriceHistory:
         """
         return len(self.prices) >= min_count
     
-    def getPriceRange(self, start_idx: int = 0, end_idx: int = None) -> List[float]:
+    def getPriceRange(self, start_idx: int = 0, end_idx: int = None):
         """특정 범위의 가격 데이터 반환
         
         Args:
@@ -127,7 +127,7 @@ class PriceHistory:
         
         return self.prices[start_idx:end_idx]
     
-    def getRecentPrices(self, count: int) -> List[float]:
+    def getRecentPrices(self, count: int):
         """최근 N개의 가격 데이터 반환
         
         Args:
@@ -141,7 +141,7 @@ class PriceHistory:
         
         return self.prices[-count:].copy()
     
-    def __str__(self) -> str:
+    def __str__(self):
         """문자열 표현"""
         if self.isEmpty():
             return "PriceHistory(empty)"
@@ -149,6 +149,6 @@ class PriceHistory:
         latest = self.getLatestPrice()
         return f"PriceHistory(length={self.getLength()}, latest={latest:.2f})"
     
-    def __repr__(self) -> str:
+    def __repr__(self):
         """공식 문자열 표현"""
         return f"PriceHistory(max_length={self.max_length}, current_length={self.getLength()})"

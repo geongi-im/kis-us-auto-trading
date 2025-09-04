@@ -128,6 +128,7 @@ class MACDStrategy:
                  fast_period: int = 12,
                  slow_period: int = 26,
                  signal_period: int = 9,
+                 minute_timeframe: str = "5",
                  buy_rate: float = 0.05,
                  sell_rate: float = 0.05):
         
@@ -139,6 +140,7 @@ class MACDStrategy:
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period
+        self.minute_timeframe = minute_timeframe
         self.buy_rate = buy_rate
         self.sell_rate = sell_rate
         
@@ -199,12 +201,12 @@ class MACDStrategy:
     def _loadMinuteData(self):
         """분봉 데이터 로드 (일봉 실패시 대체)"""
         try:
-            self.logger.info("분봉 데이터로 MACD 계산...")
+            self.logger.info(f"{self.minute_timeframe}분봉 데이터로 MACD 계산...")
             
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
                 ticker=self.ticker,
-                time_frame="5",  # 5분봉으로 노이즈 줄이기
+                time_frame=self.minute_timeframe,  # 설정된 분봉 주기 사용
                 include_prev_day="1"
             )
             
@@ -226,7 +228,7 @@ class MACDStrategy:
                 except (ValueError, KeyError):
                     continue
             
-            self.logger.info(f"총 {self.price_history.getLength()}개의 분봉 데이터 로드 완료")
+            self.logger.info(f"총 {self.price_history.getLength()}개의 {self.minute_timeframe}분봉 데이터 로드 완료")
             
             min_required = self.slow_period + self.signal_period + 1
             return self.price_history.getLength() >= min_required

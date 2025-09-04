@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import pytz
+import ta
 from kis_base import KisBase
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
@@ -80,8 +81,8 @@ def main():
             for col in numeric_cols:
                 df_cleaned[col] = pd.to_numeric(df_cleaned[col], errors='coerce')
             
-            # 최신 시간 순으로 정렬
-            df_cleaned = df_cleaned.sort_values('datetime_us', ascending=False).reset_index(drop=True)
+            # 시간 순으로 정렬 (MACD 계산을 위해 오름차순 필요)
+            df_cleaned = df_cleaned.sort_values('datetime_us', ascending=True).reset_index(drop=True)
             
             # MACD 계산
             df_with_macd = calculate_macd(df_cleaned)
@@ -89,10 +90,13 @@ def main():
             # 골든크로스/데드크로스 검출
             crosses = detect_macd_crosses(df_with_macd)
             
+            # 최신 데이터를 위에 표시하기 위해 다시 내림차순 정렬
+            df_display = df_with_macd.sort_values('datetime_us', ascending=False).reset_index(drop=True)
+            
             # 결과 출력
-            print(f"\n{market}:{ticker} {time_frame}분봉 데이터 (최근 {len(df_with_macd)}개)")
+            print(f"\n{market}:{ticker} {time_frame}분봉 데이터 (최근 {len(df_display)}개)")
             print("=" * 80)
-            print(df_with_macd[['us_time', 'kr_time', 'last', 'macd', 'signal', 'histogram']].head(10).to_string(index=False))
+            print(df_display[['us_time', 'kr_time', 'last', 'macd', 'signal', 'histogram']].head(10).to_string(index=False))
             print("=" * 80)
             
             # 골든크로스/데드크로스 출력
@@ -104,13 +108,13 @@ def main():
                     print("\n[+] 골든크로스 발생 시점:")
                     for _, row in crosses['golden_cross'].iterrows():
                         print(f"  미국시간: {row['us_time']}, 한국시간: {row['kr_time']}")
-                        print(f"  가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
+                        print(f"  가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}\n")
                 
                 if not crosses['death_cross'].empty:
                     print("\n[-] 데드크로스 발생 시점:")
                     for _, row in crosses['death_cross'].iterrows():
                         print(f"  미국시간: {row['us_time']}, 한국시간: {row['kr_time']}")
-                        print(f"  가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
+                        print(f"  가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}\n")
             else:
                 print("\n[!] 분석 기간 내 골든크로스/데드크로스가 발생하지 않았습니다.")
             
@@ -123,18 +127,29 @@ def main():
             
             # 기본 통계 정보
             print(f"\n통계 정보:")
-            print(f"시작 시간 (미국): {df_with_macd['us_time'].iloc[-1]}")
-            print(f"시작 시간 (한국): {df_with_macd['kr_time'].iloc[-1]}")
-            print(f"종료 시간 (미국): {df_with_macd['us_time'].iloc[0]}")
-            print(f"종료 시간 (한국): {df_with_macd['kr_time'].iloc[0]}")
-            print(f"시가: ${df_with_macd['last'].iloc[-1]:.2f}")
-            print(f"고가: ${df_with_macd['high'].max():.2f}")
-            print(f"저가: ${df_with_macd['low'].min():.2f}")
-            print(f"종가: ${df_with_macd['last'].iloc[0]:.2f}")
-            print(f"총 거래량: {df_with_macd['evol'].sum():,.0f}")
-            print(f"현재 MACD: {df_with_macd['macd'].iloc[0]:.4f}")
-            print(f"현재 Signal: {df_with_macd['signal'].iloc[0]:.4f}")
-            print(f"현재 Histogram: {df_with_macd['histogram'].iloc[0]:.4f}")
+            print(f"시작 시간 (미국): {df_display['us_time'].iloc[-1]}")
+            print(f"시작 시간 (한국): {df_display['kr_time'].iloc[-1]}")
+            print(f"종료 시간 (미국): {df_display['us_time'].iloc[0]}")
+            print(f"종료 시간 (한국): {df_display['kr_time'].iloc[0]}")
+            print(f"시가: ${df_display['last'].iloc[-1]:.2f}")
+            print(f"고가: ${df_display['high'].max():.2f}")
+            print(f"저가: ${df_display['low'].min():.2f}")
+            print(f"종가: ${df_display['last'].iloc[0]:.2f}")
+            print(f"총 거래량: {df_display['evol'].sum():,.0f}")
+            
+            # NaN이 아닌 경우만 출력
+            latest_macd = df_display['macd'].iloc[0]
+            latest_signal = df_display['signal'].iloc[0] 
+            latest_histogram = df_display['histogram'].iloc[0]
+            
+            if not pd.isna(latest_macd):
+                print(f"현재 MACD: {latest_macd:.4f}")
+                print(f"현재 Signal: {latest_signal:.4f}")
+                print(f"현재 Histogram: {latest_histogram:.4f}")
+            else:
+                print("현재 MACD: 계산 중 (데이터 부족)")
+                print("현재 Signal: 계산 중 (데이터 부족)")
+                print("현재 Histogram: 계산 중 (데이터 부족)")
             
         else:
             logger.warning("조회된 데이터가 없습니다.")
@@ -144,7 +159,7 @@ def main():
         raise e
 
 def calculate_macd(df, fast_period=12, slow_period=26, signal_period=9):
-    """MACD 계산
+    """ta 라이브러리를 사용한 정확한 MACD 계산
     Args:
         df: 가격 데이터프레임
         fast_period: 빠른 EMA 기간 (기본 12)
@@ -155,21 +170,29 @@ def calculate_macd(df, fast_period=12, slow_period=26, signal_period=9):
     """
     df = df.copy()
     
-    # 종가를 기준으로 EMA 계산
+    # 종가를 기준으로 MACD 계산 (ta 라이브러리 사용)
     close_prices = df['last'].astype(float)
     
-    # EMA 계산
-    ema_fast = close_prices.ewm(span=fast_period).mean()
-    ema_slow = close_prices.ewm(span=slow_period).mean()
+    # ta 라이브러리를 사용한 MACD 계산
+    macd_line = ta.trend.MACD(close=close_prices, 
+                              window_fast=fast_period, 
+                              window_slow=slow_period, 
+                              window_sign=signal_period).macd()
     
-    # MACD 라인 = 빠른 EMA - 느린 EMA
-    df['macd'] = ema_fast - ema_slow
+    macd_signal = ta.trend.MACD(close=close_prices, 
+                               window_fast=fast_period, 
+                               window_slow=slow_period, 
+                               window_sign=signal_period).macd_signal()
     
-    # 시그널 라인 = MACD의 EMA
-    df['signal'] = df['macd'].ewm(span=signal_period).mean()
+    macd_histogram = ta.trend.MACD(close=close_prices, 
+                                  window_fast=fast_period, 
+                                  window_slow=slow_period, 
+                                  window_sign=signal_period).macd_diff()
     
-    # 히스토그램 = MACD - 시그널
-    df['histogram'] = df['macd'] - df['signal']
+    # 결과를 데이터프레임에 추가
+    df['macd'] = macd_line
+    df['signal'] = macd_signal
+    df['histogram'] = macd_histogram
     
     return df
 

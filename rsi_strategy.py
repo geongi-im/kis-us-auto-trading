@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from ta.momentum import RSIIndicator
-from ta.trend import MACD
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from kis_price import KisPrice
@@ -41,65 +40,6 @@ class RSICalculator:
             return None
 
 
-class MACDCalculator:
-    """MACD 계산 클래스"""
-    
-    def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9):
-        self.fast_period = fast_period
-        self.slow_period = slow_period
-        self.signal_period = signal_period
-        
-    def calculateMacd(self, prices):
-        """MACD 계산
-        Args:
-            prices: 가격 리스트 (최소 slow_period + signal_period 개 필요)
-        Returns:
-            dict: {'macd': MACD값, 'signal': Signal값, 'histogram': 히스토그램값} 또는 None
-        """
-        min_required = self.slow_period + self.signal_period
-        if len(prices) < min_required:
-            return None
-            
-        try:
-            # 판다스 Series로 변환
-            price_series = pd.Series(prices)
-            
-            # MACD 계산
-            macd_indicator = MACD(
-                close=price_series, 
-                window_fast=self.fast_period,
-                window_slow=self.slow_period,
-                window_sign=self.signal_period
-            )
-            
-            macd_line = macd_indicator.macd()
-            signal_line = macd_indicator.macd_signal()
-            histogram = macd_indicator.macd_diff()
-            
-            # 최신 값들 반환
-            return {
-                'macd': macd_line.iloc[-1],
-                'signal': signal_line.iloc[-1],
-                'histogram': histogram.iloc[-1]
-            }
-            
-        except Exception as e:
-            return None
-    
-    def isGoldenCross(self, prices):
-        """MACD 골든크로스 판단
-        Args:
-            prices: 가격 리스트
-        Returns:
-            bool: 골든크로스 상태이면 True
-        """
-        macd_data = self.calculateMacd(prices)
-        if not macd_data:
-            return False
-            
-        # MACD가 Signal보다 위에 있으면 골든크로스
-        return macd_data['macd'] > macd_data['signal']
-
 
 class RSIStrategy:
     """RSI 기반 매매 전략 클래스"""
@@ -124,10 +64,9 @@ class RSIStrategy:
         self.buy_rate = buy_rate
         self.sell_rate = sell_rate
         
-        # 가격 히스토리 및 RSI, MACD 계산기
+        # 가격 히스토리 및 RSI 계산기
         self.price_history = PriceHistory(max_length=200)
         self.rsi_calculator = RSICalculator(period=rsi_period)
-        self.macd_calculator = MACDCalculator()
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
@@ -235,16 +174,6 @@ class RSIStrategy:
             return False
         
         return rsi >= self.rsi_overbought
-    
-    def getMacdGoldenCross(self):
-        """MACD 골든크로스 신호 판단"""
-        prices = self.price_history.getPrices()
-        return self.macd_calculator.isGoldenCross(prices)
-    
-    def getCurrentMacd(self):
-        """현재 MACD 값들 반환"""
-        prices = self.price_history.getPrices()
-        return self.macd_calculator.calculateMacd(prices)
     
     
     

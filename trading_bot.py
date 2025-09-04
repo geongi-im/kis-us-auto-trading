@@ -9,6 +9,7 @@ from kis_account import KisAccount
 from kis_base import KisBase
 from kis_websocket import KisWebSocket
 from rsi_strategy import RSIStrategy
+from macd_strategy import MACDStrategy
 from utils.telegram_util import TelegramUtil
 from utils.logger_util import LoggerUtil
 from utils.datetime_util import DateTimeUtil
@@ -49,15 +50,22 @@ class TradingBot:
         buy_rate = float(os.getenv("BUY_RATE"))
         sell_rate = float(os.getenv("SELL_RATE"))
         
-        # 각 종목별 RSI 전략 생성
-        self.strategies = {}
+        # 각 종목별 RSI 및 MACD 전략 생성
+        self.rsi_strategies = {}
+        self.macd_strategies = {}
         for ticker, market in trading_tickers.items():
             parse_market = self.kis_base.changeMarketCode(market)
-            self.strategies[ticker] = RSIStrategy(
+            self.rsi_strategies[ticker] = RSIStrategy(
                 ticker=ticker, 
                 market=parse_market, 
                 rsi_oversold=rsi_oversold, 
                 rsi_overbought=rsi_overbought,
+                buy_rate=buy_rate,
+                sell_rate=sell_rate
+            )
+            self.macd_strategies[ticker] = MACDStrategy(
+                ticker=ticker,
+                market=parse_market,
                 buy_rate=buy_rate,
                 sell_rate=sell_rate
             )
@@ -199,16 +207,16 @@ class TradingBot:
     
     def calculateBuyQuantity(self, ticker, cash_balance: float, current_price: float):
         """매수 수량 계산 (현금의 5%)"""
-        strategy = self.strategies[ticker]
-        buy_amount = cash_balance * strategy.buy_rate
+        rsi_strategy = self.rsi_strategies[ticker]
+        buy_amount = cash_balance * rsi_strategy.buy_rate
         quantity = int(buy_amount / current_price)
         return max(1, quantity)  # 최소 1주
     
     def calculateSellQuantity(self, ticker, stock_balance):
         """매도 수량 계산 (보유량의 5%)"""
-        strategy = self.strategies[ticker]
+        rsi_strategy = self.rsi_strategies[ticker]
         total_quantity = stock_balance['quantity']
-        sell_quantity = int(total_quantity * strategy.sell_rate)
+        sell_quantity = int(total_quantity * rsi_strategy.sell_rate)
         return max(1, min(sell_quantity, total_quantity))  # 최소 1주, 최대 보유량
     
     def getLastBuyOrderTime(self, ticker):
@@ -291,10 +299,10 @@ class TradingBot:
     
     def shouldBuy(self, ticker, market, current_price: float):
         """매수 신호 종합 판단 (RSI + 대기시간 + 계좌 조건)"""
-        strategy = self.strategies[ticker]
+        rsi_strategy = self.rsi_strategies[ticker]
         
         # RSI 신호 확인
-        if not strategy.getBuySignal():
+        if not rsi_strategy.getBuySignal():
             return False
         
         # 매수 대기시간 체크 (한국시간 기준)
@@ -320,14 +328,17 @@ class TradingBot:
     
     def shouldSell(self, ticker, market):
         """매도 신호 종합 판단 (RSI + MACD 골든크로스 + 대기시간 + 보유 주식 조건)"""
-        strategy = self.strategies[ticker]
+        rsi_strategy = self.rsi_strategies[ticker]
+        macd_strategy = self.macd_strategies[ticker]
         
         # RSI 신호 확인
-        if not strategy.getSellSignal():
+        if not rsi_strategy.getSellSignal():
             return False
         
         # MACD 골든크로스 신호 확인 (AND 조건)
-        if not strategy.getMacdGoldenCross():
+        prices = rsi_strategy.price_history.getPrices()  # RSI와 같은 가격 데이터 사용
+        macd_calculator = macd_strategy.macd_calculator
+        if not macd_calculator.isGoldenCross(prices):
             return False
         
         # 매도 대기시간 체크 (한국시간 기준)
@@ -354,7 +365,7 @@ class TradingBot:
     def executeBuyOrder(self, ticker, market, current_price: float):
         """매수 주문 실행"""
         try:
-            strategy = self.strategies[ticker]
+            rsi_strategy = self.rsi_strategies[ticker]
             cash_balance = self.getPurchaseAmount(ticker, market, current_price)
             quantity = self.calculateBuyQuantity(ticker, cash_balance, current_price)
             parse_market = self.kis_base.changeMarketCode(market, length=4)
@@ -372,7 +383,7 @@ class TradingBot:
                 self.total_trades += 1
                 
                 # 텔레그램 알림
-                rsi = strategy.getCurrentRsi()
+                rsi = rsi_strategy.getCurrentRsi()
                 message = f"""<b>[매수] 주문완료</b>
 종목코드: {ticker}
 RSI: {rsi:.1f}
@@ -395,7 +406,8 @@ RSI: {rsi:.1f}
     def executeSellOrder(self, ticker, market, current_price: float):
         """매도 주문 실행"""
         try:
-            strategy = self.strategies[ticker]
+            rsi_strategy = self.rsi_strategies[ticker]
+            macd_strategy = self.macd_strategies[ticker]
             stock_balance = self.getStockBalance(ticker, market)
             if stock_balance['quantity'] == 0:
                 self.logger.warning(f"{ticker} 매도 불가: 보유 주식 없음")
@@ -417,8 +429,9 @@ RSI: {rsi:.1f}
                 self.total_trades += 1
                 
                 # 텔레그램 알림
-                rsi = strategy.getCurrentRsi()
-                macd_data = strategy.getCurrentMacd()
+                rsi = rsi_strategy.getCurrentRsi()
+                prices = rsi_strategy.price_history.getPrices()
+                macd_data = macd_strategy.macd_calculator.calculateMacd(prices)
                 profit_loss = stock_balance['profit_loss']
                 
                 macd_info = ""
@@ -449,22 +462,24 @@ RSI: {rsi:.1f}{macd_info}
         """모든 종목에 대한 매매 신호 처리"""
         for ticker, market in self.trading_tickers.items():
             try:
-                strategy = self.strategies[ticker]
+                rsi_strategy = self.rsi_strategies[ticker]
+                macd_strategy = self.macd_strategies[ticker]
                 
                 # 현재가 조회
                 parse_market = self.kis_base.changeMarketCode(market)
-                price_info = strategy.kis_price.getPrice(parse_market, ticker)
+                price_info = rsi_strategy.kis_price.getPrice(parse_market, ticker)
                 current_price = float(price_info.get('last', 0))
                 
                 if current_price <= 0:
                     self.logger.warning(f"{ticker} 유효한 가격 정보를 가져올 수 없습니다.")
                     continue
                 
-                # 현재 RSI 가격 업데이트
-                strategy.updatePrice(current_price)
+                # 현재 RSI 및 MACD 가격 업데이트
+                rsi_strategy.updatePrice(current_price)
+                macd_strategy.updatePrice(current_price)
                 
                 # RSI 계산
-                rsi = strategy.getCurrentRsi()
+                rsi = rsi_strategy.getCurrentRsi()
                 if rsi is None:
                     self.logger.warning(f"{ticker} RSI 계산 불가 (데이터 부족)")
                     continue
@@ -479,7 +494,8 @@ RSI: {rsi:.1f}{macd_info}
                 # 매도 신호 확인
                 elif self.shouldSell(ticker, market):
                     # MACD 정보도 로깅
-                    macd_data = strategy.getCurrentMacd()
+                    prices = rsi_strategy.price_history.getPrices()
+                    macd_data = macd_strategy.macd_calculator.calculateMacd(prices)
                     macd_info = ""
                     if macd_data:
                         macd_info = f", MACD: {macd_data['macd']:.4f}, Signal: {macd_data['signal']:.4f}"
@@ -508,16 +524,23 @@ RSI: {rsi:.1f}{macd_info}
             self.telegram.sendMessage(holiday_msg)
             return
         
-        # 모든 종목에 대한 과거 데이터 로드
-        for ticker, strategy in self.strategies.items():
-            if not strategy.loadHistoricalData():
-                self.logger.error(f"{ticker} 과거 데이터 로드 실패. 봇을 종료합니다.")
+        # 모든 종목에 대한 과거 데이터 로드 (RSI 및 MACD)
+        for ticker in self.trading_tickers.keys():
+            rsi_strategy = self.rsi_strategies[ticker]
+            macd_strategy = self.macd_strategies[ticker]
+            
+            if not rsi_strategy.loadHistoricalData():
+                self.logger.error(f"{ticker} RSI 과거 데이터 로드 실패. 봇을 종료합니다.")
+                return
+                
+            if not macd_strategy.loadHistoricalData():
+                self.logger.error(f"{ticker} MACD 과거 데이터 로드 실패. 봇을 종료합니다.")
                 return
         
         # 모든 종목에 대한 RSI 설정 정보 표시
         rsi_info = []
-        for ticker, strategy in self.strategies.items():
-            rsi_info.append(f"{ticker}: {strategy.rsi_oversold}/{strategy.rsi_overbought}")
+        for ticker, rsi_strategy in self.rsi_strategies.items():
+            rsi_info.append(f"{ticker}: {rsi_strategy.rsi_oversold}/{rsi_strategy.rsi_overbought}")
                 
         # 시작 알림
         account_no = os.getenv("ACCOUNT_NO")
@@ -528,8 +551,8 @@ RSI: {rsi:.1f}{macd_info}
 계좌번호: {account_no} ({env_type})
 탐지 종목: {', '.join(ticker_names)}
 탐지 간격: {self.check_interval_minutes}분
-매수 신호(RSI 과매도): {list(self.strategies.values())[0].rsi_oversold} 이하
-매도 신호(RSI 과매수): {list(self.strategies.values())[0].rsi_overbought} 이상"""
+매수 신호(RSI 과매도): {list(self.rsi_strategies.values())[0].rsi_oversold} 이하
+매도 신호(RSI 과매수): {list(self.rsi_strategies.values())[0].rsi_overbought} 이상 + MACD 골든크로스"""
         
         self.telegram.sendMessage(start_msg)
         
@@ -758,9 +781,14 @@ RSI: {rsi:.1f}{macd_info}
 
     def getBotStatus(self):
         """봇 현재 상태 반환"""
-        strategies_status = {}
-        for ticker, strategy in self.strategies.items():
-            strategies_status[ticker] = strategy.getStrategyStatus()
+        rsi_strategies_status = {}
+        macd_strategies_status = {}
+        
+        for ticker, rsi_strategy in self.rsi_strategies.items():
+            rsi_strategies_status[ticker] = rsi_strategy.getStrategyStatus()
+            
+        for ticker, macd_strategy in self.macd_strategies.items():
+            macd_strategies_status[ticker] = macd_strategy.getStrategyStatus()
         
         return {
             "is_running": self.is_running,
@@ -768,5 +796,6 @@ RSI: {rsi:.1f}{macd_info}
             "total_trades": self.total_trades,
             "is_market_hours": self.isMarketHours(),
             "trading_tickers": self.trading_tickers,
-            "strategies": strategies_status
+            "rsi_strategies": rsi_strategies_status,
+            "macd_strategies": macd_strategies_status
         }

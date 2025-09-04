@@ -697,7 +697,7 @@ RSI: {rsi:.1f}
             
             # 체결 금액 계산
             try:
-                qty = float(execution_qty)
+                qty = int(execution_qty)
                 price = float(int(execution_price)/10000)
                 total_amount = qty * price
             except:

@@ -6,7 +6,6 @@ from typing import List, Dict, Optional
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
 
-
 class PriceHistory:
     """가격 데이터 히스토리 관리 클래스"""
     

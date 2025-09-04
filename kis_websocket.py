@@ -177,7 +177,7 @@ class KisWebSocket(KisBase):
         except Exception as e:
             self.logger.error(f"체결통보 처리 오류: {e}")
     
-    def parse_execution_data(self, data: str) -> Dict:
+    def parse_execution_data(self, data: str):
         """체결통보 데이터 파싱"""
         try:
             fields = data.split('^')

@@ -319,11 +319,15 @@ class TradingBot:
         return True
     
     def shouldSell(self, ticker, market):
-        """매도 신호 종합 판단 (RSI + 대기시간 + 보유 주식 조건)"""
+        """매도 신호 종합 판단 (RSI + MACD 골든크로스 + 대기시간 + 보유 주식 조건)"""
         strategy = self.strategies[ticker]
         
         # RSI 신호 확인
         if not strategy.getSellSignal():
+            return False
+        
+        # MACD 골든크로스 신호 확인 (AND 조건)
+        if not strategy.getMacdGoldenCross():
             return False
         
         # 매도 대기시간 체크 (한국시간 기준)
@@ -414,10 +418,16 @@ RSI: {rsi:.1f}
                 
                 # 텔레그램 알림
                 rsi = strategy.getCurrentRsi()
+                macd_data = strategy.getCurrentMacd()
                 profit_loss = stock_balance['profit_loss']
+                
+                macd_info = ""
+                if macd_data:
+                    macd_info = f"\nMACD: {macd_data['macd']:.4f}\nSignal: {macd_data['signal']:.4f}\nGolden Cross: ✅"
+                
                 message = f"""<b>[매도] 주문완료</b>
 종목코드: {ticker}
-RSI: {rsi:.1f}
+RSI: {rsi:.1f}{macd_info}
 수량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
 평가손익: ${profit_loss:.2f}
@@ -468,7 +478,12 @@ RSI: {rsi:.1f}
                 
                 # 매도 신호 확인
                 elif self.shouldSell(ticker, market):
-                    self.logger.info(f"{ticker} 매도 신호 감지! RSI: {rsi:.1f}")
+                    # MACD 정보도 로깅
+                    macd_data = strategy.getCurrentMacd()
+                    macd_info = ""
+                    if macd_data:
+                        macd_info = f", MACD: {macd_data['macd']:.4f}, Signal: {macd_data['signal']:.4f}"
+                    self.logger.info(f"{ticker} 매도 신호 감지! RSI: {rsi:.1f}{macd_info}")
                     self.executeSellOrder(ticker, market, current_price)
                     
             except Exception as e:

@@ -6,7 +6,9 @@ AMEX:XLF 종목의 1분봉 120개를 조회하는 테스트 코드
 
 import os
 import pandas as pd
+import numpy as np
 from datetime import datetime
+from kis_base import KisBase
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
 
@@ -23,21 +25,27 @@ def main():
     try:
         # KisPrice 인스턴스 생성
         kis_price = KisPrice()
+        kis_base = KisBase()
         
         # 조회 조건 설정
-        market = "AMS"  # AMEX 거래소 코드
-        ticker = "XLF"  # 종목 코드
-        time_frame = "1"  # 1분봉
+        market = "NYSE"  # AMEX 거래소 코드
+        ticker = "PAXS"  # 종목 코드
+        time_frame = "5"  # 1분봉
+        parse_market = kis_base.changeMarketCode(market)
         
-        logger.info(f"분봉 데이터 조회 시작: {market}:{ticker} ({time_frame}분봉)")
+        logger.info(f"분봉 데이터 조회 시작: {parse_market}:{ticker} ({time_frame}분봉)")
         
-        # 분봉 데이터 조회
+        # 분봉 데이터 조회 (100개로 수정)
         chart_data = kis_price.getMinuteChartPrice(
-            market=market,
+            market=parse_market,
             ticker=ticker,
             time_frame=time_frame,
             include_prev_day="1"  # 전일 포함
         )
+        
+        # 100개로 제한
+        if len(chart_data) > 100:
+            chart_data = chart_data[:100]
         
         if not chart_data:
             logger.error("분봉 데이터를 가져올 수 없습니다.")
@@ -63,26 +71,54 @@ def main():
             # 최신 시간 순으로 정렬
             df_cleaned = df_cleaned.sort_values('datetime', ascending=False).reset_index(drop=True)
             
+            # MACD 계산
+            df_with_macd = calculate_macd(df_cleaned)
+            
+            # 골든크로스/데드크로스 검출
+            crosses = detect_macd_crosses(df_with_macd)
+            
             # 결과 출력
-            print(f"\n{market}:{ticker} 1분봉 데이터 (최근 {len(df_cleaned)}개)")
+            print(f"\n{market}:{ticker} {time_frame}분봉 데이터 (최근 {len(df_with_macd)}개)")
             print("=" * 80)
-            print(df_cleaned.head(10).to_string(index=False))
+            print(df_with_macd[['datetime', 'last', 'macd', 'signal', 'histogram']].head(10).to_string(index=False))
+            print("=" * 80)
+            
+            # 골든크로스/데드크로스 출력
+            if not crosses['golden_cross'].empty or not crosses['death_cross'].empty:
+                print("\n[MACD] 골든크로스/데드크로스 분석")
+                print("=" * 80)
+                
+                if not crosses['golden_cross'].empty:
+                    print("\n[+] 골든크로스 발생 시점:")
+                    for _, row in crosses['golden_cross'].iterrows():
+                        print(f"  시간: {row['datetime']}, 가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
+                
+                if not crosses['death_cross'].empty:
+                    print("\n[-] 데드크로스 발생 시점:")
+                    for _, row in crosses['death_cross'].iterrows():
+                        print(f"  시간: {row['datetime']}, 가격: ${row['last']:.2f}, MACD: {row['macd']:.4f}, Signal: {row['signal']:.4f}")
+            else:
+                print("\n[!] 분석 기간 내 골든크로스/데드크로스가 발생하지 않았습니다.")
+            
             print("=" * 80)
             
             # CSV 파일로 저장
-            filename = f"{ticker}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            df_cleaned.to_csv(filename, index=False, encoding='utf-8-sig')
-            logger.info(f"분봉 데이터가 {filename} 파일로 저장되었습니다.")
+            filename = f"{ticker}_{time_frame}min_macd_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            df_with_macd.to_csv(filename, index=False, encoding='utf-8-sig')
+            logger.info(f"MACD 분석 결과가 {filename} 파일로 저장되었습니다.")
             
             # 기본 통계 정보
             print(f"\n통계 정보:")
-            print(f"시작 시간: {df_cleaned['datetime'].iloc[-1]}")
-            print(f"종료 시간: {df_cleaned['datetime'].iloc[0]}")
-            print(f"시가: ${df_cleaned['open'].iloc[-1]:.2f}")
-            print(f"고가: ${df_cleaned['high'].max():.2f}")
-            print(f"저가: ${df_cleaned['low'].min():.2f}")
-            print(f"종가: ${df_cleaned['last'].iloc[0]:.2f}")
-            print(f"총 거래량: {df_cleaned['evol'].sum():,.0f}")
+            print(f"시작 시간: {df_with_macd['datetime'].iloc[-1]}")
+            print(f"종료 시간: {df_with_macd['datetime'].iloc[0]}")
+            print(f"시가: ${df_with_macd['last'].iloc[-1]:.2f}")
+            print(f"고가: ${df_with_macd['high'].max():.2f}")
+            print(f"저가: ${df_with_macd['low'].min():.2f}")
+            print(f"종가: ${df_with_macd['last'].iloc[0]:.2f}")
+            print(f"총 거래량: {df_with_macd['evol'].sum():,.0f}")
+            print(f"현재 MACD: {df_with_macd['macd'].iloc[0]:.4f}")
+            print(f"현재 Signal: {df_with_macd['signal'].iloc[0]:.4f}")
+            print(f"현재 Histogram: {df_with_macd['histogram'].iloc[0]:.4f}")
             
         else:
             logger.warning("조회된 데이터가 없습니다.")
@@ -90,6 +126,69 @@ def main():
     except Exception as e:
         logger.error(f"분봉 조회 중 오류 발생: {e}")
         raise e
+
+def calculate_macd(df, fast_period=12, slow_period=26, signal_period=9):
+    """MACD 계산
+    Args:
+        df: 가격 데이터프레임
+        fast_period: 빠른 EMA 기간 (기본 12)
+        slow_period: 느린 EMA 기간 (기본 26)
+        signal_period: 시그널 라인 기간 (기본 9)
+    Returns:
+        MACD가 추가된 데이터프레임
+    """
+    df = df.copy()
+    
+    # 종가를 기준으로 EMA 계산
+    close_prices = df['last'].astype(float)
+    
+    # EMA 계산
+    ema_fast = close_prices.ewm(span=fast_period).mean()
+    ema_slow = close_prices.ewm(span=slow_period).mean()
+    
+    # MACD 라인 = 빠른 EMA - 느린 EMA
+    df['macd'] = ema_fast - ema_slow
+    
+    # 시그널 라인 = MACD의 EMA
+    df['signal'] = df['macd'].ewm(span=signal_period).mean()
+    
+    # 히스토그램 = MACD - 시그널
+    df['histogram'] = df['macd'] - df['signal']
+    
+    return df
+
+def detect_macd_crosses(df):
+    """MACD 골든크로스/데드크로스 검출
+    Args:
+        df: MACD가 계산된 데이터프레임
+    Returns:
+        dict: 골든크로스와 데드크로스 발생 시점
+    """
+    df = df.copy()
+    
+    # MACD와 시그널 라인의 교차점 계산
+    df['prev_macd'] = df['macd'].shift(1)
+    df['prev_signal'] = df['signal'].shift(1)
+    
+    # 골든크로스: MACD가 시그널을 아래에서 위로 돌파
+    golden_cross_condition = (
+        (df['prev_macd'] <= df['prev_signal']) &  # 이전에는 MACD가 시그널 아래
+        (df['macd'] > df['signal'])  # 현재는 MACD가 시그널 위
+    )
+    
+    # 데드크로스: MACD가 시그널을 위에서 아래로 돌파
+    death_cross_condition = (
+        (df['prev_macd'] >= df['prev_signal']) &  # 이전에는 MACD가 시그널 위
+        (df['macd'] < df['signal'])  # 현재는 MACD가 시그널 아래
+    )
+    
+    golden_crosses = df[golden_cross_condition].copy()
+    death_crosses = df[death_cross_condition].copy()
+    
+    return {
+        'golden_cross': golden_crosses,
+        'death_cross': death_crosses
+    }
 
 if __name__ == "__main__":
     main()

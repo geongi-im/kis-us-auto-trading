@@ -117,6 +117,34 @@ class MACDCalculator:
                 'death_cross': False,
                 'current_macd': None
             }
+    
+    def isGoldenCross(self, prices):
+        """MACD 골든크로스 상태 판단 (현재 상태만)
+        Args:
+            prices: 가격 리스트
+        Returns:
+            bool: 현재 골든크로스 상태이면 True
+        """
+        macd_data = self.calculateMacd(prices)
+        if not macd_data or macd_data['macd'] is None or macd_data['signal'] is None:
+            return False
+            
+        # MACD가 Signal보다 위에 있으면 골든크로스 상태
+        return macd_data['macd'] > macd_data['signal']
+    
+    def isDeadCross(self, prices):
+        """MACD 데드크로스 상태 판단 (현재 상태만)
+        Args:
+            prices: 가격 리스트
+        Returns:
+            bool: 현재 데드크로스 상태이면 True
+        """
+        macd_data = self.calculateMacd(prices)
+        if not macd_data or macd_data['macd'] is None or macd_data['signal'] is None:
+            return False
+            
+        # MACD가 Signal보다 아래에 있으면 데드크로스 상태
+        return macd_data['macd'] < macd_data['signal']
 
 
 class MACDStrategy:

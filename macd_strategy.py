@@ -8,13 +8,36 @@ from utils.logger_util import LoggerUtil
 from utils.price_history import PriceHistory
 
 
-class MACDCalculator:
-    """MACD 계산 클래스"""
+class MACDStrategy:
+    """MACD 기반 매매 전략 클래스"""
     
-    def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9):
+    def __init__(self, 
+                 ticker: str = "TQQQ",
+                 market: str = "NAS", 
+                 fast_period: int = 12,
+                 slow_period: int = 26,
+                 signal_period: int = 9,
+                 minute_timeframe: str = "5",
+                 buy_rate: float = 0.05,
+                 sell_rate: float = 0.05):
+        
+        # 로거 초기화
+        self.logger = LoggerUtil().get_logger()
+        
+        self.ticker = ticker
+        self.market = market
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period
+        self.minute_timeframe = minute_timeframe
+        self.buy_rate = buy_rate
+        self.sell_rate = sell_rate
+        
+        # 가격 히스토리
+        self.price_history = PriceHistory(max_length=200)
+        
+        # KIS 가격 조회 객체
+        self.kis_price = KisPrice()
     
     def calculateMacd(self, prices):
         """MACD 계산
@@ -187,43 +210,6 @@ class MACDCalculator:
             
         # MACD가 Signal보다 아래에 있으면 데드크로스 상태
         return macd_data['macd'] < macd_data['signal']
-
-
-class MACDStrategy:
-    """MACD 기반 매매 전략 클래스"""
-    
-    def __init__(self, 
-                 ticker: str = "TQQQ",
-                 market: str = "NAS", 
-                 fast_period: int = 12,
-                 slow_period: int = 26,
-                 signal_period: int = 9,
-                 minute_timeframe: str = "5",
-                 buy_rate: float = 0.05,
-                 sell_rate: float = 0.05):
-        
-        # 로거 초기화
-        self.logger = LoggerUtil().get_logger()
-        
-        self.ticker = ticker
-        self.market = market
-        self.fast_period = fast_period
-        self.slow_period = slow_period
-        self.signal_period = signal_period
-        self.minute_timeframe = minute_timeframe
-        self.buy_rate = buy_rate
-        self.sell_rate = sell_rate
-        
-        # 가격 히스토리 및 MACD 계산기
-        self.price_history = PriceHistory(max_length=200)
-        self.macd_calculator = MACDCalculator(
-            fast_period=fast_period, 
-            slow_period=slow_period, 
-            signal_period=signal_period
-        )
-        
-        # KIS 가격 조회 객체
-        self.kis_price = KisPrice()
     
     def loadHistoricalData(self, days: int = 30):
         """과거 데이터 로드 (장 시작 전 호출)"""
@@ -314,18 +300,18 @@ class MACDStrategy:
     def getCurrentMacd(self):
         """현재 MACD 값 계산"""
         prices = self.price_history.getPrices()
-        return self.macd_calculator.calculateMacd(prices)
+        return self.calculateMacd(prices)
     
     def getBuySignal(self):
         """MACD 기반 매수 신호 판단 (골든크로스)"""
         prices = self.price_history.getPrices()
-        crosses = self.macd_calculator.detectCrosses(prices)
+        crosses = self.detectCrosses(prices)
         return crosses.get('golden_cross', False)
     
     def getSellSignal(self):
         """MACD 기반 매도 신호 판단 (데드크로스)"""
         prices = self.price_history.getPrices()
-        crosses = self.macd_calculator.detectCrosses(prices)
+        crosses = self.detectCrosses(prices)
         return crosses.get('death_cross', False)
     
     def getStrategyStatus(self):
@@ -333,7 +319,7 @@ class MACDStrategy:
         prices = self.price_history.getPrices()
         current_price = prices[-1] if prices else None
         macd_data = self.getCurrentMacd()
-        crosses = self.macd_calculator.detectCrosses(prices)
+        crosses = self.detectCrosses(prices)
         
         return {
             "ticker": self.ticker,

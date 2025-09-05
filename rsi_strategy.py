@@ -8,39 +8,6 @@ from utils.logger_util import LoggerUtil
 from utils.price_history import PriceHistory
 
 
-class RSICalculator:
-    """RSI 계산 클래스"""
-    
-    def __init__(self, period: int = 14):
-        self.period = period
-    
-    def calculateRsi(self, prices):
-        """RSI 계산
-        Args:
-            prices: 가격 리스트 (최소 period+1 개 필요)
-        Returns:
-            RSI 값 (0-100) 또는 None (데이터 부족시)
-        """
-        if len(prices) < self.period + 1:
-            return None
-        
-        try:
-            # 판다스 Series로 변환
-            price_series = pd.Series(prices)
-            
-            # RSI 계산
-            rsi_indicator = RSIIndicator(close=price_series, window=self.period)
-            rsi_values = rsi_indicator.rsi()
-            
-            # 최신 RSI 값 반환
-            return rsi_values.iloc[-1]
-        
-        except Exception as e:
-            self.logger.error(f"RSI 계산 중 오류 발생: {e}")
-            return None
-
-
-
 class RSIStrategy:
     """RSI 기반 매매 전략 클래스"""
     
@@ -64,9 +31,8 @@ class RSIStrategy:
         self.buy_rate = buy_rate
         self.sell_rate = sell_rate
         
-        # 가격 히스토리 및 RSI 계산기
+        # 가격 히스토리
         self.price_history = PriceHistory(max_length=200)
-        self.rsi_calculator = RSICalculator(period=rsi_period)
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
@@ -118,7 +84,24 @@ class RSIStrategy:
     def getCurrentRsi(self):
         """현재 RSI 값 계산"""
         prices = self.price_history.getPrices()
-        return self.rsi_calculator.calculateRsi(prices)
+        
+        if len(prices) < self.rsi_period + 1:
+            return None
+        
+        try:
+            # 판다스 Series로 변환
+            price_series = pd.Series(prices)
+            
+            # RSI 계산
+            rsi_indicator = RSIIndicator(close=price_series, window=self.rsi_period)
+            rsi_values = rsi_indicator.rsi()
+            
+            # 최신 RSI 값 반환
+            return rsi_values.iloc[-1]
+        
+        except Exception as e:
+            self.logger.error(f"RSI 계산 중 오류 발생: {e}")
+            return None
     
     def getBuySignal(self):
         """순수 RSI 기반 매수 신호 판단"""
@@ -135,8 +118,6 @@ class RSIStrategy:
             return False
         
         return rsi >= self.rsi_overbought
-    
-    
     
     def getStrategyStatus(self):
         """전략 현재 상태 반환"""

@@ -493,12 +493,14 @@ RSI: {rsi:.1f}{macd_info}
                 
                 # 매도 신호 확인
                 elif self.shouldSell(ticker, market):
-                    # MACD 정보도 로깅
+                    # MACD 골든크로스 정보도 로깅
                     prices = rsi_strategy.price_history.getPrices()
-                    macd_data = macd_strategy.macd_calculator.calculateMacd(prices)
+                    macd_calculator = macd_strategy.macd_calculator
+                    macd_data = macd_calculator.calculateMacd(prices)
+                    is_golden_cross = macd_calculator.isGoldenCross(prices)
                     macd_info = ""
                     if macd_data:
-                        macd_info = f", MACD: {macd_data['macd']:.4f}, Signal: {macd_data['signal']:.4f}"
+                        macd_info = f", MACD: {macd_data['macd']:.4f}, Signal: {macd_data['signal']:.4f}, Golden Cross: {'✅' if is_golden_cross else '❌'}"
                     self.logger.info(f"{ticker} 매도 신호 감지! RSI: {rsi:.1f}{macd_info}")
                     self.executeSellOrder(ticker, market, current_price)
                     

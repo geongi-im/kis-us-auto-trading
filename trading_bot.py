@@ -521,17 +521,12 @@ RSI: {rsi:.1f}{macd_info}
             self.telegram.sendMessage(holiday_msg)
             return
         
-        # 모든 종목에 대한 과거 데이터 로드 (RSI 및 MACD)
+        # RSI 과거 데이터 로드 (MACD는 실시간 분봉 방식이므로 생략)
         for ticker in self.trading_tickers.keys():
             rsi_strategy = self.rsi_strategies[ticker]
-            macd_strategy = self.macd_strategies[ticker]
             
             if not rsi_strategy.loadHistoricalData():
                 self.logger.error(f"{ticker} RSI 과거 데이터 로드 실패. 봇을 종료합니다.")
-                return
-                
-            if not macd_strategy.loadHistoricalData():
-                self.logger.error(f"{ticker} MACD 과거 데이터 로드 실패. 봇을 종료합니다.")
                 return
         
         # 모든 종목에 대한 RSI 설정 정보 표시

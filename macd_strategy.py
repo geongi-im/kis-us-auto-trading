@@ -36,121 +36,8 @@ class MACDStrategy:
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
     
-    def calculateMacd(self, prices):
-        """MACD 계산
-        Args:
-            prices: 가격 리스트 (최소 slow_period + signal_period 개 필요)
-        Returns:
-            dict: {'macd': float, 'signal': float, 'histogram': float} 또는 None
-        """
-        min_required = self.slow_period + self.signal_period
-        if len(prices) < min_required:
-            return None
-        
-        try:
-            # 판다스 Series로 변환
-            price_series = pd.Series(prices)
-            
-            # ta 라이브러리를 사용한 MACD 계산
-            macd_line = ta.trend.MACD(close=price_series, 
-                                      window_fast=self.fast_period, 
-                                      window_slow=self.slow_period, 
-                                      window_sign=self.signal_period).macd()
-            
-            macd_signal = ta.trend.MACD(close=price_series, 
-                                       window_fast=self.fast_period, 
-                                       window_slow=self.slow_period, 
-                                       window_sign=self.signal_period).macd_signal()
-            
-            macd_histogram = ta.trend.MACD(close=price_series, 
-                                          window_fast=self.fast_period, 
-                                          window_slow=self.slow_period, 
-                                          window_sign=self.signal_period).macd_diff()
-            
-            # 최신 값들 반환
-            return {
-                'macd': macd_line.iloc[-1] if not pd.isna(macd_line.iloc[-1]) else None,
-                'signal': macd_signal.iloc[-1] if not pd.isna(macd_signal.iloc[-1]) else None,
-                'histogram': macd_histogram.iloc[-1] if not pd.isna(macd_histogram.iloc[-1]) else None
-            }
-        
-        except Exception as e:
-            return None
     
-    def detectCrosses(self, prices):
-        """MACD 골든크로스/데드크로스 검출
-        Args:
-            prices: 가격 리스트
-        Returns:
-            dict: {'golden_cross': bool, 'death_cross': bool, 'current_macd': dict}
-        """
-        min_required = self.slow_period + self.signal_period + 1  # 교차점 검출을 위해 +1
-        if len(prices) < min_required:
-            return {
-                'golden_cross': False,
-                'death_cross': False,
-                'current_macd': None
-            }
-        
-        try:
-            price_series = pd.Series(prices)
-            
-            # MACD 계산
-            macd_line = ta.trend.MACD(close=price_series, 
-                                      window_fast=self.fast_period, 
-                                      window_slow=self.slow_period, 
-                                      window_sign=self.signal_period).macd()
-            
-            macd_signal = ta.trend.MACD(close=price_series, 
-                                       window_fast=self.fast_period, 
-                                       window_slow=self.slow_period, 
-                                       window_sign=self.signal_period).macd_signal()
-            
-            # 최근 2개 값으로 교차점 검출
-            if len(macd_line) < 2 or pd.isna(macd_line.iloc[-2]) or pd.isna(macd_line.iloc[-1]):
-                return {
-                    'golden_cross': False,
-                    'death_cross': False,
-                    'current_macd': self.calculateMacd(prices)
-                }
-            
-            prev_macd = macd_line.iloc[-2]
-            curr_macd = macd_line.iloc[-1]
-            prev_signal = macd_signal.iloc[-2]
-            curr_signal = macd_signal.iloc[-1]
-            
-            # 골든크로스: MACD가 Signal을 아래에서 위로 돌파
-            golden_cross = (prev_macd <= prev_signal) and (curr_macd > curr_signal)
-            
-            # 데드크로스: MACD가 Signal을 위에서 아래로 돌파
-            death_cross = (prev_macd >= prev_signal) and (curr_macd < curr_signal)
-            
-            return {
-                'golden_cross': golden_cross,
-                'death_cross': death_cross,
-                'current_macd': self.calculateMacd(prices)
-            }
-            
-        except Exception as e:
-            return {
-                'golden_cross': False,
-                'death_cross': False,
-                'current_macd': None
-            }
     
-    def isGoldenCross(self, prices):
-        """MACD 골든크로스 상태 판단 (현재 상태만)
-        Args:
-            prices: 가격 리스트
-        Returns:
-            bool: 현재 골든크로스 상태이면 True
-        """
-        macd_data = self.calculateMacd(prices)
-        if not macd_data or macd_data['macd'] is None or macd_data['signal'] is None:
-            return False
-            
-        # MACD가 Signal보다 위에 있으면 골든크로스 상태
-        return macd_data['macd'] > macd_data['signal']
     
     def hasRecentGoldenCross(self, lookback_periods=3):
         """최근 N봉 내 MACD 골든크로스 발생 여부 체크 (실시간 분봉 데이터 조회)
@@ -194,11 +81,16 @@ class MACDStrategy:
             # 판다스 Series로 변환
             price_series = pd.Series(prices)
             
-            # MACD 계산
-            exp1 = price_series.ewm(span=self.fast_period).mean()
-            exp2 = price_series.ewm(span=self.slow_period).mean()
-            macd_line = exp1 - exp2
-            signal_line = macd_line.ewm(span=self.signal_period).mean()
+            # ta 라이브러리를 사용한 MACD 계산
+            macd_line = ta.trend.MACD(close=price_series, 
+                                      window_fast=self.fast_period, 
+                                      window_slow=self.slow_period, 
+                                      window_sign=self.signal_period).macd()
+            
+            signal_line = ta.trend.MACD(close=price_series, 
+                                       window_fast=self.fast_period, 
+                                       window_slow=self.slow_period, 
+                                       window_sign=self.signal_period).macd_signal()
             
             # 최근 N봉 동안 골든크로스 발생 여부 체크
             for i in range(1, lookback_periods + 1):
@@ -221,28 +113,7 @@ class MACDStrategy:
             self.logger.error(f"최근 골든크로스 체크 중 오류: {e}")
             return False
     
-    def isDeadCross(self, prices):
-        """MACD 데드크로스 상태 판단 (현재 상태만)
-        Args:
-            prices: 가격 리스트
-        Returns:
-            bool: 현재 데드크로스 상태이면 True
-        """
-        macd_data = self.calculateMacd(prices)
-        if not macd_data or macd_data['macd'] is None or macd_data['signal'] is None:
-            return False
-            
-        # MACD가 Signal보다 아래에 있으면 데드크로스 상태
-        return macd_data['macd'] < macd_data['signal']
     
-    def loadHistoricalData(self, days: int = 30):
-        """MACD는 실시간 분봉 조회 방식이므로 초기 데이터 로드 불필요"""
-        self.logger.info(f"{self.ticker} MACD 전략: 실시간 분봉 계산 방식으로 초기 데이터 로드 생략")
-        return True
-    
-    def updatePrice(self, price: float):
-        """MACD는 실시간 분봉 조회 방식이므로 가격 업데이트 불필요"""
-        pass
     
     def getCurrentMacd(self):
         """현재 MACD 값 계산 (실시간 분봉 데이터 조회)"""
@@ -274,7 +145,30 @@ class MACDStrategy:
                 except (ValueError, KeyError):
                     continue
             
-            return self.calculateMacd(prices)
+            # ta 라이브러리를 사용한 MACD 계산
+            price_series = pd.Series(prices)
+            
+            macd_line = ta.trend.MACD(close=price_series, 
+                                      window_fast=self.fast_period, 
+                                      window_slow=self.slow_period, 
+                                      window_sign=self.signal_period).macd()
+            
+            macd_signal = ta.trend.MACD(close=price_series, 
+                                       window_fast=self.fast_period, 
+                                       window_slow=self.slow_period, 
+                                       window_sign=self.signal_period).macd_signal()
+            
+            macd_histogram = ta.trend.MACD(close=price_series, 
+                                          window_fast=self.fast_period, 
+                                          window_slow=self.slow_period, 
+                                          window_sign=self.signal_period).macd_diff()
+            
+            # 최신 값들 반환
+            return {
+                'macd': macd_line.iloc[-1] if not pd.isna(macd_line.iloc[-1]) else None,
+                'signal': macd_signal.iloc[-1] if not pd.isna(macd_signal.iloc[-1]) else None,
+                'histogram': macd_histogram.iloc[-1] if not pd.isna(macd_histogram.iloc[-1]) else None
+            }
             
         except Exception as e:
             self.logger.error(f"현재 MACD 계산 중 오류: {e}")

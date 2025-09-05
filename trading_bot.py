@@ -335,10 +335,10 @@ class TradingBot:
         if not rsi_strategy.getSellSignal():
             return False
         
-        # MACD 골든크로스 신호 확인 (AND 조건)
+        # MACD 최근 3봉 골든크로스 신호 확인 (AND 조건)
         prices = rsi_strategy.price_history.getPrices()  # RSI와 같은 가격 데이터 사용
         macd_calculator = macd_strategy.macd_calculator
-        if not macd_calculator.isGoldenCross(prices):
+        if not macd_calculator.hasRecentGoldenCross(prices, 3):
             return False
         
         # 매도 대기시간 체크 (한국시간 기준)
@@ -493,14 +493,14 @@ RSI: {rsi:.1f}{macd_info}
                 
                 # 매도 신호 확인
                 elif self.shouldSell(ticker, market):
-                    # MACD 골든크로스 정보도 로깅
+                    # MACD 최근 골든크로스 정보도 로깅
                     prices = rsi_strategy.price_history.getPrices()
                     macd_calculator = macd_strategy.macd_calculator
                     macd_data = macd_calculator.calculateMacd(prices)
-                    is_golden_cross = macd_calculator.isGoldenCross(prices)
+                    has_recent_golden_cross = macd_calculator.hasRecentGoldenCross(prices, 3)
                     macd_info = ""
                     if macd_data:
-                        macd_info = f", MACD: {macd_data['macd']:.4f}, Signal: {macd_data['signal']:.4f}, Golden Cross: {'✅' if is_golden_cross else '❌'}"
+                        macd_info = f", MACD: {macd_data['macd']:.4f}, Signal: {macd_data['signal']:.4f}, Recent Golden Cross (3봉): {'✅' if has_recent_golden_cross else '❌'}"
                     self.logger.info(f"{ticker} 매도 신호 감지! RSI: {rsi:.1f}{macd_info}")
                     self.executeSellOrder(ticker, market, current_price)
                     

@@ -132,6 +132,48 @@ class MACDCalculator:
         # MACD가 Signal보다 위에 있으면 골든크로스 상태
         return macd_data['macd'] > macd_data['signal']
     
+    def hasRecentGoldenCross(self, prices, lookback_periods=3):
+        """최근 N봉 내 MACD 골든크로스 발생 여부 체크
+        Args:
+            prices: 가격 리스트 
+            lookback_periods: 확인할 봉의 수 (기본값: 3)
+        Returns:
+            bool: 최근 N봉 내 골든크로스 발생했으면 True
+        """
+        if len(prices) < self.slow_period + lookback_periods:
+            return False
+            
+        try:
+            # 판다스 Series로 변환
+            price_series = pd.Series(prices)
+            
+            # MACD 계산
+            exp1 = price_series.ewm(span=self.fast_period).mean()
+            exp2 = price_series.ewm(span=self.slow_period).mean()
+            macd_line = exp1 - exp2
+            signal_line = macd_line.ewm(span=self.signal_period).mean()
+            
+            # 최근 N봉 동안 골든크로스 발생 여부 체크
+            for i in range(1, lookback_periods + 1):
+                if len(macd_line) < i + 1 or len(signal_line) < i + 1:
+                    continue
+                    
+                # 현재봉: MACD > Signal, 이전봉: MACD <= Signal 이면 골든크로스 발생
+                current_macd = macd_line.iloc[-i]
+                current_signal = signal_line.iloc[-i]
+                prev_macd = macd_line.iloc[-i-1] 
+                prev_signal = signal_line.iloc[-i-1]
+                
+                if (current_macd > current_signal and 
+                    prev_macd <= prev_signal):
+                    return True
+                    
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"최근 골든크로스 체크 중 오류: {e}")
+            return False
+    
     def isDeadCross(self, prices):
         """MACD 데드크로스 상태 판단 (현재 상태만)
         Args:

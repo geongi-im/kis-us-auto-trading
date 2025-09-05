@@ -53,12 +53,7 @@ class RSIStrategy:
             # 일봉 데이터 처리 (시간순으로 정렬)
             for data in reversed(chart_data):  # 최신 데이터가 먼저 오므로 역순으로 처리
                 try:
-                    # 다양한 종가 필드명 시도
-                    price = None
-                    for field in ['clos', 'close', 'last', 'c']:
-                        if field in data and data[field]:
-                            price = float(data[field])
-                            break
+                    price = float(data['clos']) if 'clos' in data and data['clos'] else None
                     
                     if price and price > 0:
                         self.price_history.addPrice(price)

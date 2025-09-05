@@ -65,11 +65,7 @@ class MACDStrategy:
             prices = []
             for data in reversed(chart_data):
                 try:
-                    price = None
-                    for field in ['last', 'clos', 'close', 'c']:
-                        if field in data and data[field]:
-                            price = float(data[field])
-                            break
+                    price = float(data['last']) if 'last' in data and data['last'] else None
                     if price and price > 0:
                         prices.append(price)
                 except (ValueError, KeyError):
@@ -135,11 +131,7 @@ class MACDStrategy:
             prices = []
             for data in reversed(chart_data):
                 try:
-                    price = None
-                    for field in ['last', 'clos', 'close', 'c']:
-                        if field in data and data[field]:
-                            price = float(data[field])
-                            break
+                    price = float(data['last']) if 'last' in data and data['last'] else None
                     if price and price > 0:
                         prices.append(price)
                 except (ValueError, KeyError):

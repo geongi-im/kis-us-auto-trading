@@ -74,7 +74,7 @@ class RSIStrategy:
     def loadHistoricalData(self, days: int = 30):
         """과거 데이터 로드 (장 시작 전 호출)"""
         try:
-            # 일봉 데이터 조회 (더 안정적인 RSI 계산을 위해)
+            # 일봉 데이터 조회 (RSI 계산은 반드시 일봉으로만)
             chart_data = self.kis_price.getDailyPrice(
                 market=self.market,
                 ticker=self.ticker,
@@ -82,8 +82,7 @@ class RSIStrategy:
             )
             
             if not chart_data:
-                self.logger.warning(f"{self.market}:{self.ticker} 일봉 데이터 조회 실패, 분봉 데이터로 시도...")
-                return self._loadMinuteData()
+                raise Exception(f"{self.market}:{self.ticker} 일봉 데이터 조회 실패 - RSI 계산을 위해서는 일봉 데이터가 필수입니다")
             
             # 일봉 데이터 처리 (시간순으로 정렬)
             for data in reversed(chart_data):  # 최신 데이터가 먼저 오므로 역순으로 처리
@@ -100,55 +99,17 @@ class RSIStrategy:
                 except (ValueError, KeyError):
                     continue
             
+            # RSI 계산을 위한 최소 데이터 확인
+            if self.price_history.getLength() < self.rsi_period + 1:
+                raise Exception(f"{self.market}:{self.ticker} 일봉 데이터 부족 (현재: {self.price_history.getLength()}개, 필요: {self.rsi_period + 1}개) - RSI 계산을 위해서는 충분한 일봉 데이터가 필요합니다")
+            
             self.logger.info(f"{self.market}:{self.ticker} 총 {self.price_history.getLength()}개의 일봉 데이터 로드 완료")
-            
-            # 데이터가 부족하면 분봉으로 보완
-            if self.price_history.getLength() < 15:
-                self.logger.warning(f"{self.market}:{self.ticker} 일봉 데이터 부족, 분봉으로 보완...")
-                return self._loadMinuteData()
-            
             return True
             
         except Exception as e:
-            self.logger.error(f"데이터 로드 중 오류 발생: {e}")
+            self.logger.error(f"일봉 데이터 로드 실패: {e}")
             raise e
     
-    def _loadMinuteData(self):
-        """분봉 데이터 로드 (일봉 실패시 대체)"""
-        try:
-            self.logger.info("분봉 데이터로 RSI 계산...")
-            
-            chart_data = self.kis_price.getMinuteChartPrice(
-                market=self.market,
-                ticker=self.ticker,
-                time_frame="5",  # 5분봉으로 노이즈 줄이기
-                include_prev_day="1"
-            )
-            
-            if not chart_data:
-                self.logger.error(f"{self.market} {self.ticker} 종목 분봉 데이터 로드 실패")
-                return False
-            
-            # 5분봉 데이터 처리
-            for data in reversed(chart_data):
-                try:
-                    price = None
-                    for field in ['last', 'clos', 'close', 'c']:
-                        if field in data and data[field]:
-                            price = float(data[field])
-                            break
-                    
-                    if price and price > 0:
-                        self.price_history.addPrice(price)
-                except (ValueError, KeyError):
-                    continue
-            
-            self.logger.info(f"총 {self.price_history.getLength()}개의 분봉 데이터 로드 완료")
-            return self.price_history.getLength() >= 15
-            
-        except Exception as e:
-            self.logger.error(f"분봉 데이터 로드 실패: {e}")
-            raise e
     
     def updatePrice(self, price: float):
         """실시간 가격 업데이트"""

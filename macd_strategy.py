@@ -174,14 +174,6 @@ class MACDStrategy:
             self.logger.error(f"현재 MACD 계산 중 오류: {e}")
             return None
     
-    def getBuySignal(self):
-        """MACD 기반 매수 신호 판단 (골든크로스) - 사용 안함"""
-        return False
-    
-    def getSellSignal(self):
-        """MACD 기반 매도 신호 판단 (데드크로스) - 사용 안함"""
-        return False
-    
     def getStrategyStatus(self):
         """전략 현재 상태 반환"""
         macd_data = self.getCurrentMacd()

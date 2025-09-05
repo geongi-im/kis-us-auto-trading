@@ -33,9 +33,6 @@ class MACDStrategy:
         self.buy_rate = buy_rate
         self.sell_rate = sell_rate
         
-        # 가격 히스토리
-        self.price_history = PriceHistory(max_length=200)
-        
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
     
@@ -155,18 +152,45 @@ class MACDStrategy:
         # MACD가 Signal보다 위에 있으면 골든크로스 상태
         return macd_data['macd'] > macd_data['signal']
     
-    def hasRecentGoldenCross(self, prices, lookback_periods=3):
-        """최근 N봉 내 MACD 골든크로스 발생 여부 체크
+    def hasRecentGoldenCross(self, lookback_periods=3):
+        """최근 N봉 내 MACD 골든크로스 발생 여부 체크 (실시간 분봉 데이터 조회)
         Args:
-            prices: 가격 리스트 
             lookback_periods: 확인할 봉의 수 (기본값: 3)
         Returns:
             bool: 최근 N봉 내 골든크로스 발생했으면 True
         """
-        if len(prices) < self.slow_period + lookback_periods:
-            return False
-            
         try:
+            # 충분한 분봉 데이터 조회 (MACD 계산 + 골든크로스 확인용)
+            required_periods = self.slow_period + self.signal_period + lookback_periods + 5
+            
+            chart_data = self.kis_price.getMinuteChartPrice(
+                market=self.market,
+                ticker=self.ticker,
+                time_frame=self.minute_timeframe,
+                include_prev_day="1"
+            )
+            
+            if not chart_data or len(chart_data) < required_periods:
+                self.logger.warning(f"{self.ticker} 분봉 데이터 부족: {len(chart_data) if chart_data else 0}개")
+                return False
+            
+            # 가격 데이터 추출 (시간순 정렬)
+            prices = []
+            for data in reversed(chart_data):
+                try:
+                    price = None
+                    for field in ['last', 'clos', 'close', 'c']:
+                        if field in data and data[field]:
+                            price = float(data[field])
+                            break
+                    if price and price > 0:
+                        prices.append(price)
+                except (ValueError, KeyError):
+                    continue
+            
+            if len(prices) < required_periods:
+                return False
+            
             # 판다스 Series로 변환
             price_series = pd.Series(prices)
             
@@ -212,65 +236,32 @@ class MACDStrategy:
         return macd_data['macd'] < macd_data['signal']
     
     def loadHistoricalData(self, days: int = 30):
-        """과거 데이터 로드 (장 시작 전 호출)"""
-        try:
-            # 일봉 데이터 조회 (더 안정적인 MACD 계산을 위해)
-            chart_data = self.kis_price.getDailyPrice(
-                market=self.market,
-                ticker=self.ticker,
-                base_date=""  # 최근 데이터
-            )
-            
-            if not chart_data:
-                self.logger.warning(f"{self.market}:{self.ticker} 일봉 데이터 조회 실패, 분봉 데이터로 시도...")
-                return self._loadMinuteData()
-            
-            # 일봉 데이터 처리 (시간순으로 정렬)
-            for data in reversed(chart_data):  # 최신 데이터가 먼저 오므로 역순으로 처리
-                try:
-                    # 다양한 종가 필드명 시도
-                    price = None
-                    for field in ['clos', 'close', 'last', 'c']:
-                        if field in data and data[field]:
-                            price = float(data[field])
-                            break
-                    
-                    if price and price > 0:
-                        self.price_history.addPrice(price)
-                except (ValueError, KeyError):
-                    continue
-            
-            self.logger.info(f"{self.market}:{self.ticker} 총 {self.price_history.getLength()}개의 일봉 데이터 로드 완료")
-            
-            # 데이터가 부족하면 분봉으로 보완
-            min_required = self.slow_period + self.signal_period + 5  # 여유분 포함
-            if self.price_history.getLength() < min_required:
-                self.logger.warning(f"{self.market}:{self.ticker} 일봉 데이터 부족 ({self.price_history.getLength()}개), 분봉으로 보완...")
-                return self._loadMinuteData()
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"데이터 로드 중 오류 발생: {e}")
-            raise e
+        """MACD는 실시간 분봉 조회 방식이므로 초기 데이터 로드 불필요"""
+        self.logger.info(f"{self.ticker} MACD 전략: 실시간 분봉 계산 방식으로 초기 데이터 로드 생략")
+        return True
     
-    def _loadMinuteData(self):
-        """분봉 데이터 로드 (일봉 실패시 대체)"""
+    def updatePrice(self, price: float):
+        """MACD는 실시간 분봉 조회 방식이므로 가격 업데이트 불필요"""
+        pass
+    
+    def getCurrentMacd(self):
+        """현재 MACD 값 계산 (실시간 분봉 데이터 조회)"""
         try:
-            self.logger.info(f"{self.minute_timeframe}분봉 데이터로 MACD 계산...")
+            # 충분한 분봉 데이터 조회
+            required_periods = self.slow_period + self.signal_period + 5
             
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
                 ticker=self.ticker,
-                time_frame=self.minute_timeframe,  # 설정된 분봉 주기 사용
+                time_frame=self.minute_timeframe,
                 include_prev_day="1"
             )
             
-            if not chart_data:
-                self.logger.error(f"{self.market} {self.ticker} 종목 분봉 데이터 로드 실패")
-                return False
+            if not chart_data or len(chart_data) < required_periods:
+                return None
             
-            # 5분봉 데이터 처리
+            # 가격 데이터 추출 (시간순 정렬)
+            prices = []
             for data in reversed(chart_data):
                 try:
                     price = None
@@ -278,59 +269,38 @@ class MACDStrategy:
                         if field in data and data[field]:
                             price = float(data[field])
                             break
-                    
                     if price and price > 0:
-                        self.price_history.addPrice(price)
+                        prices.append(price)
                 except (ValueError, KeyError):
                     continue
             
-            self.logger.info(f"총 {self.price_history.getLength()}개의 {self.minute_timeframe}분봉 데이터 로드 완료")
-            
-            min_required = self.slow_period + self.signal_period + 1
-            return self.price_history.getLength() >= min_required
+            return self.calculateMacd(prices)
             
         except Exception as e:
-            self.logger.error(f"분봉 데이터 로드 실패: {e}")
-            raise e
-    
-    def updatePrice(self, price: float):
-        """실시간 가격 업데이트"""
-        self.price_history.addPrice(price)
-    
-    def getCurrentMacd(self):
-        """현재 MACD 값 계산"""
-        prices = self.price_history.getPrices()
-        return self.calculateMacd(prices)
+            self.logger.error(f"현재 MACD 계산 중 오류: {e}")
+            return None
     
     def getBuySignal(self):
-        """MACD 기반 매수 신호 판단 (골든크로스)"""
-        prices = self.price_history.getPrices()
-        crosses = self.detectCrosses(prices)
-        return crosses.get('golden_cross', False)
+        """MACD 기반 매수 신호 판단 (골든크로스) - 사용 안함"""
+        return False
     
     def getSellSignal(self):
-        """MACD 기반 매도 신호 판단 (데드크로스)"""
-        prices = self.price_history.getPrices()
-        crosses = self.detectCrosses(prices)
-        return crosses.get('death_cross', False)
+        """MACD 기반 매도 신호 판단 (데드크로스) - 사용 안함"""
+        return False
     
     def getStrategyStatus(self):
         """전략 현재 상태 반환"""
-        prices = self.price_history.getPrices()
-        current_price = prices[-1] if prices else None
         macd_data = self.getCurrentMacd()
-        crosses = self.detectCrosses(prices)
+        has_recent_golden_cross = self.hasRecentGoldenCross(3)
         
         return {
             "ticker": self.ticker,
-            "current_price": current_price,
             "current_macd": macd_data.get('macd') if macd_data else None,
             "current_signal": macd_data.get('signal') if macd_data else None,
             "current_histogram": macd_data.get('histogram') if macd_data else None,
-            "data_length": self.price_history.getLength(),
-            "buy_signal": crosses.get('golden_cross', False),
-            "sell_signal": crosses.get('death_cross', False),
+            "recent_golden_cross": has_recent_golden_cross,
             "fast_period": self.fast_period,
             "slow_period": self.slow_period,
-            "signal_period": self.signal_period
+            "signal_period": self.signal_period,
+            "minute_timeframe": self.minute_timeframe
         }

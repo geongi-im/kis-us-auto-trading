@@ -539,7 +539,7 @@ RSI: {rsi:.1f}{macd_info}
         env_type = "모의투자" if is_virtual else "실투자"
         
         # 장 시작시 봇 정보와 보유 종목 현황을 통합하여 한 번에 전송
-        self.sendPortfolioStatus(include_bot_info=True)
+        self.sendPortfolioStatus()
         
         # WebSocket 체결통보 연결 시작
         try:
@@ -611,46 +611,45 @@ RSI: {rsi:.1f}{macd_info}
         
         self.logger.info("다중 종목 매매 봇이 종료되었습니다.")
     
-    def sendPortfolioStatus(self, include_bot_info=False):
-        """현재 보유 종목 현황을 텔레그램으로 전송"""
+    def sendPortfolioStatus(self):
+        """장 시작시 봇 정보와 보유 종목 현황을 텔레그램으로 전송"""
         try:
-            self.logger.info("보유 종목 현황 조회 시작")
+            self.logger.info("장 시작 알림 및 보유 종목 현황 조회 시작")
             
             # 미국 시장 보유 종목 조회
             balance_result = self.kis_account.getBalance(market="NASD")
             
             stocks = balance_result.get('stocks', [])
             summary = balance_result.get('summary', {})
-                                       
-            # 메시지 생성
-            message = self._formatPortfolioMessage(stocks, summary, include_bot_info)
+            
+            # 장 시작 알림 메시지 생성 및 전송
+            message = self._createStartupMessage(stocks, summary)
             self.telegram.sendMessage(message)
-            self.logger.info(f"보유 종목 현황 텔레그램 전송 완료: {len(stocks)}개 종목")
+            self.logger.info(f"장 시작 알림 및 보유 종목 현황 텔레그램 전송 완료: {len(stocks)}개 종목")
             
         except Exception as e:
-            error_msg = f"보유 종목 현황 조회 중 오류: {str(e)}"
+            error_msg = f"장 시작 알림 및 보유 종목 현황 조회 중 오류: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
             self.telegram.sendMessage(f"❌ <b>오류 발생</b>\n{error_msg}")
     
-    def _formatPortfolioMessage(self, stocks, summary, include_bot_info=False):
-        """보유 종목 정보를 텔레그램 메시지 포맷으로 변환"""
+    def _createStartupMessage(self, stocks, summary):
+        """장 시작시 전송할 통합 메시지 생성"""
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         message = f"📊 <b>장 시작 알림</b>\n"
         message += f"🕘 {current_time}\n\n"
         
-        # 봇 정보가 포함된 경우 추가
-        if include_bot_info:
-            env_type = "모의투자" if os.getenv('IS_VIRTUAL', 'true').lower() == 'true' else "실투자"
-            account_no = os.getenv('ACCOUNT_NO', 'N/A')
-            ticker_names = list(self.rsi_strategies.keys())
-            
-            message += f"🤖 <b>봇 정보</b>\n"
-            message += f"계좌번호: {account_no} ({env_type})\n"
-            message += f"탐지 종목: {', '.join(ticker_names)}\n"
-            message += f"탐지 간격: {self.check_interval_minutes}분\n"
-            message += f"매수 신호(RSI 과매도): {list(self.rsi_strategies.values())[0].rsi_oversold} 이하\n"
-            message += f"매도 신호(RSI 과매수): {list(self.rsi_strategies.values())[0].rsi_overbought} 이상 + MACD 골든크로스\n\n"
+        # 봇 정보 추가
+        env_type = "모의투자" if os.getenv('IS_VIRTUAL', 'true').lower() == 'true' else "실투자"
+        account_no = os.getenv('ACCOUNT_NO', 'N/A')
+        ticker_names = list(self.rsi_strategies.keys())
+        
+        message += f"🤖 <b>봇 정보</b>\n"
+        message += f"계좌번호: {account_no} ({env_type})\n"
+        message += f"탐지 종목: {', '.join(ticker_names)}\n"
+        message += f"탐지 간격: {self.check_interval_minutes}분\n"
+        message += f"매수 신호(RSI 과매도): {list(self.rsi_strategies.values())[0].rsi_oversold} 이하\n"
+        message += f"매도 신호(RSI 과매수): {list(self.rsi_strategies.values())[0].rsi_overbought} 이상 + MACD 골든크로스\n\n"
 
         if not stocks:
             message += "현재 보유 종목이 없습니다."

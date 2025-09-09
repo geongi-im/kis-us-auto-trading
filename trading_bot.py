@@ -67,7 +67,8 @@ class TradingBot:
                 ticker=ticker,
                 market=parse_market,
                 buy_rate=buy_rate,
-                sell_rate=sell_rate
+                sell_rate=sell_rate,
+                minute_timeframe=self.check_interval_minutes
             )
         
         # 텔레그램 유틸
@@ -382,7 +383,7 @@ class TradingBot:
                 
                 # 텔레그램 알림
                 rsi = rsi_strategy.getCurrentRsi()
-                message = f"""<b>[매수] 주문완료</b>
+                message = f"""<b>🤝[매수] 주문완료</b>
 종목코드: {ticker}
 RSI: {rsi:.1f}
 수량: {quantity}주 (${quantity * current_price:.2f})
@@ -433,9 +434,9 @@ RSI: {rsi:.1f}
                 
                 macd_info = ""
                 if macd_data:
-                    macd_info = f"\nMACD: {macd_data['macd']:.4f}\nSignal: {macd_data['signal']:.4f}\nGolden Cross: ✅"
+                    macd_info = f"\nMACD: {macd_data['macd']:.4f}\nSignal: {macd_data['signal']:.4f}\n"
                 
-                message = f"""<b>[매도] 주문완료</b>
+                message = f"""<b>🧾[매도] 주문완료</b>
 종목코드: {ticker}
 RSI: {rsi:.1f}{macd_info}
 수량: {quantity}주 (${quantity * current_price:.2f})

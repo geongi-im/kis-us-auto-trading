@@ -385,13 +385,13 @@ class TradingBot:
                 self.total_trades += 1
                 
                 # 주문번호 추출 및 추적 시스템에 추가
-                order_no = str(result.get('ODNO', ''))
+                order_no = str(int(result.get('ODNO', '')))
                 if order_no:
                     self.addOrderToTracker(order_no, ticker, '매수', quantity, current_price, market)
                 
                 # 텔레그램 알림
                 rsi = rsi_strategy.getCurrentRsi()
-                message = f"""<b>[🟥 매수] 주문완료</b>
+                message = f"""<b>🟥 [매수] 주문완료</b>
 종목코드: {ticker}
 주문번호: {order_no}
 RSI: {rsi:.1f}
@@ -437,7 +437,7 @@ RSI: {rsi:.1f}
                 self.total_trades += 1
                 
                 # 주문번호 추출 및 추적 시스템에 추가
-                order_no = str(result.get('ODNO', ''))
+                order_no = str(int(result.get('ODNO', '')))
                 if order_no:
                     self.addOrderToTracker(order_no, ticker, '매도', quantity, current_price, market)
                 
@@ -450,7 +450,7 @@ RSI: {rsi:.1f}
                 if macd_data:
                     macd_info = f"\nMACD: {macd_data['macd']:.4f}\nSignal: {macd_data['signal']:.4f}"
                 
-                message = f"""<b>[🟦 매도] 주문완료</b>
+                message = f"""<b>🟦 [매도] 주문완료</b>
 종목코드: {ticker}
 주문번호: {order_no}
 RSI: {rsi:.1f}{macd_info}

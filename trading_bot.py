@@ -79,6 +79,9 @@ class TradingBot:
         self.total_trades = 0
         self.start_time = None
         
+        # 주문 추적 시스템
+        self.active_orders = {}  # {order_no: {ticker, order_type, total_qty, executed_qty, remaining_qty, price, market}}
+        
         # 환경변수에서 시간 설정 가져오기
         market_start = os.getenv("MARKET_START_TIME")
         market_end = os.getenv("MARKET_END_TIME") 
@@ -381,10 +384,16 @@ class TradingBot:
             if result:
                 self.total_trades += 1
                 
+                # 주문번호 추출 및 추적 시스템에 추가
+                order_no = result.get('ODNO', '')
+                if order_no:
+                    self.addOrderToTracker(order_no, ticker, '매수', quantity, current_price, market)
+                
                 # 텔레그램 알림
                 rsi = rsi_strategy.getCurrentRsi()
                 message = f"""<b>🤝[매수] 주문완료</b>
 종목코드: {ticker}
+주문번호: {order_no}
 RSI: {rsi:.1f}
 수량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
@@ -392,7 +401,7 @@ RSI: {rsi:.1f}
 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                 
                 self.telegram.sendMessage(message)
-                self.logger.info(f"{ticker} 매수 주문 성공: {quantity}주 @ ${current_price:.2f}")
+                self.logger.info(f"{ticker} 매수 주문 성공: {quantity}주 @ ${current_price:.2f}, 주문번호: {order_no}")
                 return True
             
         except Exception as e:
@@ -427,6 +436,11 @@ RSI: {rsi:.1f}
             if result:
                 self.total_trades += 1
                 
+                # 주문번호 추출 및 추적 시스템에 추가
+                order_no = result.get('ODNO', '')
+                if order_no:
+                    self.addOrderToTracker(order_no, ticker, '매도', quantity, current_price, market)
+                
                 # 텔레그램 알림
                 rsi = rsi_strategy.getCurrentRsi()
                 macd_data = macd_strategy.getCurrentMacd()
@@ -438,6 +452,7 @@ RSI: {rsi:.1f}
                 
                 message = f"""<b>🧾[매도] 주문완료</b>
 종목코드: {ticker}
+주문번호: {order_no}
 RSI: {rsi:.1f}{macd_info}
 수량: {quantity}주 (${quantity * current_price:.2f})
 현재가: ${current_price:.2f}
@@ -446,7 +461,7 @@ RSI: {rsi:.1f}{macd_info}
 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                 
                 self.telegram.sendMessage(message)
-                self.logger.info(f"{ticker} 매도 주문 성공: {quantity}주 @ ${current_price:.2f}")
+                self.logger.info(f"{ticker} 매도 주문 성공: {quantity}주 @ ${current_price:.2f}, 주문번호: {order_no}")
                 return True
             
         except Exception as e:
@@ -696,6 +711,54 @@ RSI: {rsi:.1f}{macd_info}
                 message += "\n"
         
         return message
+    
+    def addOrderToTracker(self, order_no: str, ticker: str, order_type: str, total_qty: int, price: float, market: str):
+        """주문 추적 시스템에 새 주문 추가"""
+        self.active_orders[order_no] = {
+            'ticker': ticker,
+            'order_type': order_type,
+            'total_qty': total_qty,
+            'executed_qty': 0,
+            'remaining_qty': total_qty,
+            'price': price,
+            'market': market
+        }
+        self.logger.info(f"주문 추적 추가: {order_no} - {ticker} {order_type} {total_qty}주")
+    
+    def updateOrderExecution(self, order_no: str, executed_qty: int):
+        """주문 체결량 업데이트"""
+        if order_no in self.active_orders:
+            order = self.active_orders[order_no]
+            order['executed_qty'] += executed_qty
+            order['remaining_qty'] = order['total_qty'] - order['executed_qty']
+            
+            self.logger.info(f"체결량 업데이트: {order_no} - 체결: {executed_qty}주, 누적: {order['executed_qty']}주, 미체결: {order['remaining_qty']}주")
+            
+            # 모든 주문이 체결되면 추적에서 제거
+            if order['remaining_qty'] <= 0:
+                self.logger.info(f"주문 완전 체결: {order_no} - {order['ticker']} 추적 종료")
+                del self.active_orders[order_no]
+                return True  # 완전 체결
+                
+        return False  # 미완결 또는 주문번호 없음
+    
+    def getOrderExecutionInfo(self, order_no: str):
+        """주문 체결 정보 조회"""
+        return self.active_orders.get(order_no, None)
+    
+    def clearCompletedOrders(self, ticker: str = None):
+        """완료된 주문들 정리 (특정 종목 또는 전체)"""
+        to_remove = []
+        for order_no, order in self.active_orders.items():
+            if ticker is None or order['ticker'] == ticker:
+                if order['remaining_qty'] <= 0:
+                    to_remove.append(order_no)
+        
+        for order_no in to_remove:
+            del self.active_orders[order_no]
+            
+        if to_remove:
+            self.logger.info(f"완료된 주문 정리: {len(to_remove)}개 주문 제거")
 
     async def handle_execution_notification(self, execution_info: dict):
         """체결통보 처리 함수"""
@@ -743,7 +806,36 @@ RSI: {rsi:.1f}{macd_info}
             
             # 체결 완료인 경우에만 알림 전송
             if execution_yn == '2':  # 체결 완료
-                telegram_message = f"""<b>[{trade_type}] 체결완료</b>
+                # 주문 추적 정보 업데이트
+                is_fully_executed = self.updateOrderExecution(order_no, qty)
+                order_info = self.getOrderExecutionInfo(order_no)
+                
+                # 체결량 정보 포함하여 텔레그램 메시지 구성
+                if order_info:
+                    executed_qty = order_info['executed_qty']
+                    remaining_qty = order_info['remaining_qty'] 
+                    total_order_qty = order_info['total_qty']
+                    execution_rate = (executed_qty / total_order_qty) * 100
+                    
+                    telegram_message = f"""<b>[{trade_type}] 체결완료</b>
+종목코드: {ticker}
+주문번호: {order_no}
+이번 체결: {qty}주 (${total_amount:,.2f})
+누적 체결: {executed_qty}주 / {total_order_qty}주 ({execution_rate:.1f}%)
+미체결량: {remaining_qty}주
+현재가: ${price:.2f}"""
+                    
+                    if is_fully_executed:
+                        telegram_message += f"\n✅ <b>전량 체결 완료!</b>"
+                        self.logger.info(f"🎊 {ticker} {trade_type} 주문 전량 체결 완료: {total_order_qty}주")
+                    else:
+                        telegram_message += f"\n⏳ 미체결 잔량: {remaining_qty}주"
+                        
+                    telegram_message += f"\n시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    
+                else:
+                    # 추적 정보가 없는 경우 기본 메시지
+                    telegram_message = f"""<b>[{trade_type}] 체결완료</b>
 종목코드: {ticker}
 주문번호: {order_no}                
 수량: {qty}주 (${total_amount:,.2f})

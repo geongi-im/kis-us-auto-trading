@@ -816,8 +816,9 @@ RSI: {rsi:.1f}{macd_info}
                     remaining_qty = order_info['remaining_qty'] 
                     total_order_qty = order_info['total_qty']
                     execution_rate = (executed_qty / total_order_qty) * 100
+                    flag_type = "📕" if trade_type == "매수" else "📘"
                     
-                    telegram_message = f"""<b>[{trade_type}] 체결완료</b>
+                    telegram_message = f"""<b>[{flag_type} {trade_type}] 체결완료</b>
 종목코드: {ticker}
 주문번호: {order_no}
 이번 체결: {qty}주 (${total_amount:,.2f})
@@ -835,7 +836,7 @@ RSI: {rsi:.1f}{macd_info}
                     
                 else:
                     # 추적 정보가 없는 경우 기본 메시지
-                    telegram_message = f"""<b>[{trade_type}] 체결완료</b>
+                    telegram_message = f"""<b>[{flag_type} {trade_type}] 체결완료</b>
 종목코드: {ticker}
 주문번호: {order_no}                
 수량: {qty}주 (${total_amount:,.2f})

@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
-from utils.price_history import PriceHistory
 
 class MACDStrategy:
     """MACD 기반 매매 전략 클래스"""

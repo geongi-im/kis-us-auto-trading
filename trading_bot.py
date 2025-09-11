@@ -812,7 +812,6 @@ RSI: {rsi:.1f}{macd_info}
                         # 텔레그램 전송
                         self.telegram.sendMessage(telegram_message)
                         self.logger.info(f"🎊 {ticker} {trade_type} 주문 전량 체결 완료: {total_order_qty}주")
-                        self.logger.info("📤 전량 체결완료 텔레그램 메시지 전송 완료")
                     
                 else:
                     # 추적 정보가 없는 경우 기본 로그

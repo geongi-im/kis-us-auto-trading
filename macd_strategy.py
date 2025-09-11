@@ -17,7 +17,6 @@ class MACDStrategy:
                  fast_period: int = 12,
                  slow_period: int = 26,
                  signal_period: int = 9,
-                 minute_timeframe: str = "5",
                  buy_rate: float = 0.05,
                  sell_rate: float = 0.05):
         
@@ -56,7 +55,7 @@ class MACDStrategy:
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
                 ticker=self.ticker,
-                time_frame=self.minute_timeframe,
+                time_frame=self.interval,
                 include_prev_day="1"
             )
             
@@ -123,7 +122,7 @@ class MACDStrategy:
             chart_data = self.kis_price.getMinuteChartPrice(
                 market=self.market,
                 ticker=self.ticker,
-                time_frame=self.minute_timeframe,
+                time_frame=self.interval,
                 include_prev_day="1"
             )
             

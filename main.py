@@ -38,7 +38,8 @@ def checkEnvVariables():
     required_vars = ['APP_KEY', 'APP_SECRET', 'ACCOUNT_NO', 'IS_VIRTUAL', 
                      'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'MARKET_START_TIME', 
                      'MARKET_END_TIME', 'AUTO_SHUTDOWN_TIME', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT',
-                     'BUY_DELAY_MIN', 'SELL_DELAY_MIN', 'CHECK_INTERVAL_MINUTES', 'TRADING_TICKERS']
+                     'BUY_DELAY_MIN', 'SELL_DELAY_MIN', 'CHECK_INTERVAL_MINUTES', 'TRADING_TICKERS',
+                     'BUY_RATE', 'SELL_RATE', 'RSI_INTERVAL', 'MACD_INTERVAL']
     missing_vars = [var for var in required_vars if os.getenv(var) is None]
     
     if missing_vars:
@@ -48,6 +49,18 @@ def checkEnvVariables():
     is_virtual = os.getenv("IS_VIRTUAL").lower()
     if is_virtual not in ["true", "false"]:
         raise Exception("IS_VIRTUAL 환경변수는 'true' 또는 'false'로 설정해야 합니다.")
+    
+    valid_intervals = ["day", "1", "3", "5", "15", "30", "60"]
+
+    # RSI_INTERVAL 값 검증
+    rsi_interval = os.getenv("RSI_INTERVAL")
+    if rsi_interval not in valid_intervals:
+        raise Exception(f"RSI_INTERVAL은 다음 값 중 하나여야 합니다: {', '.join(valid_intervals)}")
+    
+    # MACD_INTERVAL 값 검증
+    macd_interval = os.getenv("MACD_INTERVAL")
+    if macd_interval not in valid_intervals:
+        raise Exception(f"MACD_INTERVAL은 다음 값 중 하나여야 합니다: {', '.join(valid_intervals)}")
     
     # API URL 상수 정의
     REAL_REST_URL = "https://openapi.koreainvestment.com:9443"

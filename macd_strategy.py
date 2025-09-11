@@ -29,9 +29,12 @@ class MACDStrategy:
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period
-        self.minute_timeframe = minute_timeframe
         self.buy_rate = buy_rate
         self.sell_rate = sell_rate
+        
+        # 환경변수에서 시간 간격 설정 로드
+        self.interval = os.getenv("MACD_INTERVAL")
+        self.logger.info(f"{ticker} MACD 시간 간격: {self.interval}")
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()

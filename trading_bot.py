@@ -67,8 +67,7 @@ class TradingBot:
                 ticker=ticker,
                 market=parse_market,
                 buy_rate=buy_rate,
-                sell_rate=sell_rate,
-                minute_timeframe=self.check_interval_minutes
+                sell_rate=sell_rate
             )
         
         # 텔레그램 유틸
@@ -518,6 +517,13 @@ RSI: {rsi:.1f}{macd_info}
         self.logger.info(f"RSI 다중 종목 자동매매 봇 시작: {', '.join(ticker_names)}")
         self.logger.info(f"체크 간격: {self.check_interval_minutes}분")
         self.logger.info(f"장시간: {self.market_start_time} - {self.market_end_time}")
+        
+        # 기술적 지표 설정 정보 출력
+        import os
+        rsi_interval = os.getenv("RSI_INTERVAL", "day")
+        macd_interval = os.getenv("MACD_INTERVAL", "5")
+        self.logger.info(f"RSI 시간 간격: {rsi_interval}")
+        self.logger.info(f"MACD 시간 간격: {macd_interval}")
         
         # 미국 주식시장 휴장일 체크
         is_holiday, holiday_name = self.isUSMarketHoliday()

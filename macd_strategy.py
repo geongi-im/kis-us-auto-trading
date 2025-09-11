@@ -166,6 +166,37 @@ class MACDStrategy:
             self.logger.error(f"현재 MACD 계산 중 오류: {e}")
             return None
     
+    def _getChartData(self, required_periods):
+        """설정된 간격에 따라 차트 데이터 조회"""
+        if self.interval == "day":
+            return self.kis_price.getDailyPrice(
+                market=self.market,
+                ticker=self.ticker,
+                base_date=""
+            )
+        else:
+            return self.kis_price.getMinuteChartPrice(
+                market=self.market,
+                ticker=self.ticker,
+                time_frame=self.interval,
+                include_prev_day="1"
+            )
+    
+    def _extractPrices(self, chart_data):
+        """차트 데이터에서 가격 추출"""
+        prices = []
+        price_field = 'clos' if self.interval == "day" else 'last'
+        
+        for data in reversed(chart_data):
+            try:
+                price = float(data[price_field]) if price_field in data and data[price_field] else None
+                if price and price > 0:
+                    prices.append(price)
+            except (ValueError, KeyError):
+                continue
+        
+        return prices
+
     def getStrategyStatus(self):
         """전략 현재 상태 반환"""
         macd_data = self.getCurrentMacd()
@@ -180,5 +211,6 @@ class MACDStrategy:
             "fast_period": self.fast_period,
             "slow_period": self.slow_period,
             "signal_period": self.signal_period,
-            "minute_timeframe": self.minute_timeframe
+            "interval": self.interval,
+            "data_source": "daily" if self.interval == "day" else f"{self.interval}min"
         }

@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from ta.momentum import RSIIndicator
@@ -30,7 +31,9 @@ class RSIStrategy:
         self.buy_rate = buy_rate
         self.sell_rate = sell_rate
         
-        # 실시간 일봉 데이터 조회 방식으로 변경 (PriceHistory 미사용)
+        # 환경변수에서 시간 간격 설정 로드
+        self.interval = os.getenv("RSI_INTERVAL", "day")
+        self.logger.info(f"{ticker} RSI 시간 간격: {self.interval}")
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
@@ -61,24 +64,30 @@ class RSIStrategy:
             return False
     
     def getCurrentRsi(self):
-        """현재 RSI 값 계산 (실시간 일봉 데이터 조회)"""
+        """환경변수 기반 RSI 값 계산"""
+        if self.interval == "day":
+            return self._getRsiFromDaily()
+        else:
+            return self._getRsiFromMinute(self.interval)
+    
+    def _getRsiFromDaily(self):
+        """일봉 데이터로 RSI 계산"""
         try:
-            # 충분한 일봉 데이터 조회 (RSI 계산용)
             required_periods = self.rsi_period + 5
             
             chart_data = self.kis_price.getDailyPrice(
                 market=self.market,
                 ticker=self.ticker,
-                base_date=""  # 최근 데이터
+                base_date=""
             )
             
             if not chart_data or len(chart_data) < required_periods:
                 self.logger.warning(f"{self.ticker} 일봉 데이터 부족: {len(chart_data) if chart_data else 0}개")
                 return None
             
-            # 가격 데이터 추출 (시간순 정렬)
+            # 가격 데이터 추출
             prices = []
-            for data in reversed(chart_data):  # 최신 데이터가 먼저 오므로 역순으로 처리
+            for data in reversed(chart_data):
                 try:
                     price = float(data['clos']) if 'clos' in data and data['clos'] else None
                     if price and price > 0:
@@ -89,18 +98,56 @@ class RSIStrategy:
             if len(prices) < required_periods:
                 return None
             
-            # 판다스 Series로 변환
-            price_series = pd.Series(prices)
-            
-            # RSI 계산
-            rsi_indicator = RSIIndicator(close=price_series, window=self.rsi_period)
-            rsi_values = rsi_indicator.rsi()
-            
-            # 최신 RSI 값 반환
-            return rsi_values.iloc[-1]
+            return self._calculateRsi(prices)
             
         except Exception as e:
-            self.logger.error(f"현재 RSI 계산 중 오류: {e}")
+            self.logger.error(f"일봉 RSI 계산 중 오류: {e}")
+            return None
+    
+    def _getRsiFromMinute(self, minute_frame):
+        """분봉 데이터로 RSI 계산"""
+        try:
+            required_periods = self.rsi_period + 5
+            
+            chart_data = self.kis_price.getMinuteChartPrice(
+                market=self.market,
+                ticker=self.ticker,
+                time_frame=minute_frame,
+                include_prev_day="1"
+            )
+            
+            if not chart_data or len(chart_data) < required_periods:
+                self.logger.warning(f"{self.ticker} {minute_frame}분봉 데이터 부족: {len(chart_data) if chart_data else 0}개")
+                return None
+            
+            # 가격 데이터 추출
+            prices = []
+            for data in reversed(chart_data):
+                try:
+                    price = float(data['last']) if 'last' in data and data['last'] else None
+                    if price and price > 0:
+                        prices.append(price)
+                except (ValueError, KeyError):
+                    continue
+            
+            if len(prices) < required_periods:
+                return None
+            
+            return self._calculateRsi(prices)
+            
+        except Exception as e:
+            self.logger.error(f"{minute_frame}분봉 RSI 계산 중 오류: {e}")
+            return None
+    
+    def _calculateRsi(self, prices):
+        """가격 리스트로 RSI 계산"""
+        try:
+            price_series = pd.Series(prices)
+            rsi_indicator = RSIIndicator(close=price_series, window=self.rsi_period)
+            rsi_values = rsi_indicator.rsi()
+            return rsi_values.iloc[-1]
+        except Exception as e:
+            self.logger.error(f"RSI 계산 오류: {e}")
             return None
     
     def getBuySignal(self):
@@ -120,20 +167,29 @@ class RSIStrategy:
         return rsi >= self.rsi_overbought
     
     def getCurrentPrice(self):
-        """현재 가격 조회"""
+        """현재 가격 조회 (설정된 간격에 따라)"""
         try:
-            chart_data = self.kis_price.getDailyPrice(
-                market=self.market,
-                ticker=self.ticker,
-                base_date=""  # 최근 데이터
-            )
+            if self.interval == "day":
+                chart_data = self.kis_price.getDailyPrice(
+                    market=self.market,
+                    ticker=self.ticker,
+                    base_date=""
+                )
+                if chart_data:
+                    latest_data = chart_data[0]
+                    return float(latest_data['clos']) if 'clos' in latest_data and latest_data['clos'] else None
+            else:
+                chart_data = self.kis_price.getMinuteChartPrice(
+                    market=self.market,
+                    ticker=self.ticker,
+                    time_frame=self.interval,
+                    include_prev_day="1"
+                )
+                if chart_data:
+                    latest_data = chart_data[0]
+                    return float(latest_data['last']) if 'last' in latest_data and latest_data['last'] else None
             
-            if not chart_data:
-                return None
-                
-            # 최신 일봉의 종가 반환
-            latest_data = chart_data[0]  # 첫 번째가 최신 데이터
-            return float(latest_data['clos']) if 'clos' in latest_data and latest_data['clos'] else None
+            return None
             
         except Exception as e:
             self.logger.error(f"현재 가격 조회 오류: {e}")
@@ -148,7 +204,8 @@ class RSIStrategy:
             "ticker": self.ticker,
             "current_price": current_price,
             "current_rsi": rsi,
-            "data_source": "realtime_daily",
+            "interval": self.interval,
+            "data_source": "daily" if self.interval == "day" else f"{self.interval}min",
             "buy_signal": self.getBuySignal(),
             "sell_signal": self.getSellSignal(),
             "rsi_oversold": self.rsi_oversold,

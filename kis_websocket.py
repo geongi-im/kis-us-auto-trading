@@ -48,7 +48,6 @@ class KisWebSocket(KisBase):
             
             if response.status_code == 200:
                 approval_key = response.json()["approval_key"]
-                self.logger.info(f"WebSocket 승인키 발급 완료: {approval_key[:10]}...")
                 return approval_key
             else:
                 raise Exception(f"승인키 발급 실패: {response.status_code}")

@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import ta
@@ -6,7 +7,6 @@ from typing import List, Dict, Optional
 from kis_price import KisPrice
 from utils.logger_util import LoggerUtil
 from utils.price_history import PriceHistory
-
 
 class MACDStrategy:
     """MACD 기반 매매 전략 클래스"""
@@ -33,13 +33,9 @@ class MACDStrategy:
         
         # 환경변수에서 시간 간격 설정 로드
         self.interval = os.getenv("MACD_INTERVAL")
-        self.logger.info(f"{ticker} MACD 시간 간격: {self.interval}")
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
-    
-    
-    
     
     def hasRecentGoldenCross(self, lookback_periods=3):
         """최근 N봉 내 MACD 골든크로스 발생 여부 체크 (실시간 분봉 데이터 조회)
@@ -110,8 +106,6 @@ class MACDStrategy:
         except Exception as e:
             self.logger.error(f"최근 골든크로스 체크 중 오류: {e}")
             return False
-    
-    
     
     def getCurrentMacd(self):
         """현재 MACD 값 계산 (실시간 분봉 데이터 조회)"""

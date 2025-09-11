@@ -33,7 +33,6 @@ class RSIStrategy:
         
         # 환경변수에서 시간 간격 설정 로드
         self.interval = os.getenv("RSI_INTERVAL")
-        self.logger.info(f"{ticker} RSI 시간 간격: {self.interval}")
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()

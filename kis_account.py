@@ -39,13 +39,15 @@ class KisAccount(KisBase):
         Returns:
             dict: 종목별 잔고 및 평가 정보
         """
+        parse_market = self.changeMarketCode(market, length=4)
+
         # 실전/모의투자 tr_id 구분
         tr_id = "TTTS3012R" if not self.is_virtual else "VTTS3012R"
         
         params = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
-            "OVRS_EXCG_CD": market,
+            "OVRS_EXCG_CD": parse_market,
             "TR_CRCY_CD": currency,
             "CTX_AREA_FK200": "",
             "CTX_AREA_NK200": ""

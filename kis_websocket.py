@@ -74,7 +74,6 @@ class KisWebSocket(KisBase):
             
             self.websocket = await websockets.connect(self.ws_url, ping_interval=None)
             self.is_connected = True
-            self.logger.info("WebSocket 연결 성공")
             
             # 체결통보 구독 설정
             await self.subscribe_execution_notifications(approval_key)
@@ -112,7 +111,6 @@ class KisWebSocket(KisBase):
             }
             
             await self.websocket.send(json.dumps(subscribe_data))
-            self.logger.info(f"해외주식 체결통보 구독 요청 전송 (TR_ID: {tr_id})")
             
         except Exception as e:
             self.logger.error(f"체결통보 구독 오류: {e}")
@@ -220,18 +218,13 @@ class KisWebSocket(KisBase):
             msg = json_data.get("body", {}).get("msg1", "")
             msg_cd = json_data.get("body", {}).get("msg_cd", "")
             tr_id = json_data.get("header", {}).get("tr_id")
-            
-            self.logger.info(f"구독 응답 수신 - TR_ID: {tr_id}, RT_CD: {rt_cd}, MSG_CD: {msg_cd}")
-            
+                        
             if rt_cd == '0':  # 성공
-                self.logger.info(f"구독 성공 ({tr_id}): {msg}")
-                
                 # AES 키, IV 저장
                 output = json_data.get("body", {}).get("output", {})
                 if "key" in output and "iv" in output:
                     self.aes_key = output["key"]
                     self.aes_iv = output["iv"]
-                    self.logger.info("AES 키/IV 수신 완료")
                     
             elif rt_cd == '1':  # 에러
                 if msg != 'ALREADY IN SUBSCRIBE':

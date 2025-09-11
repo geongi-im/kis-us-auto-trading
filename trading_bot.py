@@ -486,22 +486,16 @@ RSI: {rsi:.1f}{macd_info}
                     self.logger.warning(f"{ticker} 유효한 가격 정보를 가져올 수 없습니다.")
                     continue
                 
-                # RSI 계산
-                rsi = rsi_strategy.getCurrentRsi()
-                if rsi is None:
-                    self.logger.warning(f"{ticker} RSI 계산 불가 (데이터 부족)")
-                    continue
-                
-                self.logger.info(f"{ticker} 현재가: ${current_price:.2f}, RSI: {rsi:.1f}")
+                self.logger.info(f"{ticker} 현재가: ${current_price:.2f}")
                 
                 # 매수 신호 확인
                 if self.shouldBuy(ticker, market, current_price):
-                    self.logger.info(f"{ticker} 매수 신호 감지! RSI: {rsi:.1f}")
+                    self.logger.info(f"{ticker} 매수 신호 감지!")
                     self.executeBuyOrder(ticker, market, current_price)
                 
                 # 매도 신호 확인
                 elif self.shouldSell(ticker, market):
-                    self.logger.info(f"{ticker} 매도 신호 감지! RSI: {rsi:.1f}")
+                    self.logger.info(f"{ticker} 매도 신호 감지!")
                     self.executeSellOrder(ticker, market, current_price)
                     
             except Exception as e:
@@ -533,17 +527,7 @@ RSI: {rsi:.1f}{macd_info}
             # 데이터 연결 상태 확인 (실패해도 계속 진행)
             if not rsi_strategy.validateDataConnection():
                 self.logger.warning(f"{ticker} RSI 데이터 연결 경고 - 계속 진행합니다.")
-        
-        # 모든 종목에 대한 RSI 설정 정보 표시
-        rsi_info = []
-        for ticker, rsi_strategy in self.rsi_strategies.items():
-            rsi_info.append(f"{ticker}: {rsi_strategy.rsi_oversold}/{rsi_strategy.rsi_overbought}")
-                
-        # 시작 알림
-        account_no = os.getenv("ACCOUNT_NO")
-        is_virtual = os.getenv("IS_VIRTUAL").lower() == "true"
-        env_type = "모의투자" if is_virtual else "실투자"
-        
+     
         # 장 시작시 봇 정보와 보유 종목 현황을 통합하여 한 번에 전송
         self.sendPortfolioStatus()
         
@@ -551,11 +535,10 @@ RSI: {rsi:.1f}{macd_info}
         try:
             self.kis_websocket.set_execution_callback(self.handle_execution_notification)
             self.websocket_task = asyncio.create_task(self.kis_websocket.connect())
-            self.logger.info("WebSocket 체결통보 연결 시작")
             await asyncio.sleep(2)  # 연결 안정화 대기
         except Exception as e:
             self.logger.error(f"WebSocket 연결 실패: {e}")
-            self.logger.warning("체결통보 없이 매매봇만 실행합니다")
+            return
         
         try:
             while self.is_running:
@@ -619,9 +602,7 @@ RSI: {rsi:.1f}{macd_info}
     
     def sendPortfolioStatus(self):
         """장 시작시 봇 정보와 보유 종목 현황을 텔레그램으로 전송"""
-        try:
-            self.logger.info("장 시작 알림 및 보유 종목 현황 조회 시작")
-            
+        try:            
             # 미국 시장 보유 종목 조회
             balance_result = self.kis_account.getBalance(market="NASD")
             
@@ -800,53 +781,47 @@ RSI: {rsi:.1f}{macd_info}
             self.logger.info(f"체결여부: {execution_yn}")
             self.logger.info("===============================")
             
-            # 체결 완료인 경우에만 알림 전송
+            # 체결 완료인 경우에만 로그 기록
             if execution_yn == '2':  # 체결 완료
                 # 주문 추적 정보 업데이트
                 is_fully_executed = self.updateOrderExecution(order_no, qty)
                 order_info = self.getOrderExecutionInfo(order_no)
-                flag_type = "📕" if trade_type == "매수" else "📘"
                 
-                # 체결량 정보 포함하여 텔레그램 메시지 구성
+                # 체결 로그 기록
                 if order_info:
                     executed_qty = order_info['executed_qty']
                     remaining_qty = order_info['remaining_qty'] 
                     total_order_qty = order_info['total_qty']
                     execution_rate = (executed_qty / total_order_qty) * 100
                     
-                    telegram_message = f"""<b>[{flag_type} {trade_type}] 체결완료</b>
+                    self.logger.info(f"📊 {ticker} {trade_type} 체결: {qty}주 (${total_amount:,.2f}) | "
+                                   f"누적: {executed_qty}/{total_order_qty}주 ({execution_rate:.1f}%) | "
+                                   f"미체결: {remaining_qty}주")
+                    
+                    # 전량 체결 완료시에만 텔레그램 메시지 전송
+                    if is_fully_executed:
+                        flag_type = "📕" if trade_type == "매수" else "📘"
+                        telegram_message = f"""<b>{flag_type} [{trade_type}] 전량 체결완료</b>
 종목코드: {ticker}
 주문번호: {order_no}
-이번 체결: {qty}주 (${total_amount:,.2f})
-누적 체결: {executed_qty}주 / {total_order_qty}주 ({execution_rate:.1f}%)
-미체결량: {remaining_qty}주
-현재가: ${price:.2f}"""
-                    
-                    if is_fully_executed:
-                        telegram_message += f"\n✅ <b>전량 체결 완료!</b>"
-                        self.logger.info(f"🎊 {ticker} {trade_type} 주문 전량 체결 완료: {total_order_qty}주")
-                    else:
-                        telegram_message += f"\n⏳ 미체결 잔량: {remaining_qty}주"
+총 체결량: {total_order_qty}주 (${total_order_qty * price:,.2f})
+현재가: ${price:.2f}
+✅ <b>전량 체결 완료!</b>
+시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                         
-                    telegram_message += f"\n시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        # 텔레그램 전송
+                        self.telegram.sendMessage(telegram_message)
+                        self.logger.info(f"🎊 {ticker} {trade_type} 주문 전량 체결 완료: {total_order_qty}주")
+                        self.logger.info("📤 전량 체결완료 텔레그램 메시지 전송 완료")
                     
                 else:
-                    # 추적 정보가 없는 경우 기본 메시지
-                    telegram_message = f"""<b>[{flag_type} {trade_type}] 체결완료</b>
-종목코드: {ticker}
-주문번호: {order_no}                
-수량: {qty}주 (${total_amount:,.2f})
-현재가: ${price:.2f}
-시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
-                
-                # 텔레그램 전송
-                self.telegram.sendMessage(telegram_message)
-                self.logger.info("📤 체결통보 텔레그램 메시지 전송 완료")
+                    # 추적 정보가 없는 경우 기본 로그
+                    self.logger.info(f"📊 {ticker} {trade_type} 체결: {qty}주 (${total_amount:,.2f})")
             
             elif execution_yn == '1':  # 접수
-                self.logger.info(f"📝 {ticker} 주문 접수됨 - 체결 대기 중")
+                self.logger.info(f"{ticker} 주문 접수됨 - 체결 대기 중")
             else:
-                self.logger.info(f"ℹ️ {ticker} 기타 상태: {execution_yn}")
+                self.logger.info(f"{ticker} 기타 상태: {execution_yn}")
                 
         except Exception as e:
             error_msg = f"체결통보 처리 중 오류: {e}"

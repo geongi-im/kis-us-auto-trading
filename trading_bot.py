@@ -487,8 +487,6 @@ RSI: {rsi:.1f}{macd_info}
                     self.logger.warning(f"{ticker} 유효한 가격 정보를 가져올 수 없습니다.")
                     continue
                 
-                # 실시간 RSI 계산에서는 별도 가격 업데이트 불필요 (대신 getCurrentRsi()에서 직접 API 호출)
-                
                 # RSI 계산
                 rsi = rsi_strategy.getCurrentRsi()
                 if rsi is None:

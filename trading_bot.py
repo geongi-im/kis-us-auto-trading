@@ -809,6 +809,7 @@ RSI: {rsi:.1f}{macd_info}
                 # 주문 추적 정보 업데이트
                 is_fully_executed = self.updateOrderExecution(order_no, qty)
                 order_info = self.getOrderExecutionInfo(order_no)
+                flag_type = "📕" if trade_type == "매수" else "📘"
                 
                 # 체결량 정보 포함하여 텔레그램 메시지 구성
                 if order_info:
@@ -816,7 +817,6 @@ RSI: {rsi:.1f}{macd_info}
                     remaining_qty = order_info['remaining_qty'] 
                     total_order_qty = order_info['total_qty']
                     execution_rate = (executed_qty / total_order_qty) * 100
-                    flag_type = "📕" if trade_type == "매수" else "📘"
                     
                     telegram_message = f"""<b>[{flag_type} {trade_type}] 체결완료</b>
 종목코드: {ticker}

@@ -487,8 +487,7 @@ RSI: {rsi:.1f}{macd_info}
                     self.logger.warning(f"{ticker} 유효한 가격 정보를 가져올 수 없습니다.")
                     continue
                 
-                # 현재 RSI 및 MACD 가격 업데이트
-                rsi_strategy.updatePrice(current_price)
+                # 실시간 RSI 계산에서는 별도 가격 업데이트 불필요 (대신 getCurrentRsi()에서 직접 API 호출)
                 
                 # RSI 계산
                 rsi = rsi_strategy.getCurrentRsi()
@@ -530,13 +529,13 @@ RSI: {rsi:.1f}{macd_info}
             self.telegram.sendMessage(holiday_msg)
             return
         
-        # RSI 과거 데이터 로드
+        # RSI 데이터 연결 상태 확인 (선택적)
         for ticker in self.trading_tickers.keys():
             rsi_strategy = self.rsi_strategies[ticker]
             
-            if not rsi_strategy.loadHistoricalData():
-                self.logger.error(f"{ticker} RSI 과거 데이터 로드 실패. 봇을 종료합니다.")
-                return
+            # 데이터 연결 상태 확인 (실패해도 계속 진행)
+            if not rsi_strategy.validateDataConnection():
+                self.logger.warning(f"{ticker} RSI 데이터 연결 경고 - 계속 진행합니다.")
         
         # 모든 종목에 대한 RSI 설정 정보 표시
         rsi_info = []

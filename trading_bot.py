@@ -783,15 +783,17 @@ RSI: {rsi:.1f}{macd_info}
             
             # 체결 완료인 경우에만 로그 기록
             if execution_yn == '2':  # 체결 완료
+                # 주문 추적 정보 먼저 조회 (삭제되기 전에)
+                order_info = self.getOrderExecutionInfo(order_no)
+                
                 # 주문 추적 정보 업데이트
                 is_fully_executed = self.updateOrderExecution(order_no, qty)
-                order_info = self.getOrderExecutionInfo(order_no)
                 
                 # 체결 로그 기록
                 if order_info:
-                    executed_qty = order_info['executed_qty']
-                    remaining_qty = order_info['remaining_qty'] 
+                    executed_qty = order_info['executed_qty'] + qty  # 현재 체결량 포함
                     total_order_qty = order_info['total_qty']
+                    remaining_qty = total_order_qty - executed_qty
                     execution_rate = (executed_qty / total_order_qty) * 100
                     
                     self.logger.info(f"📊 {ticker} {trade_type} 체결: {qty}주 (${total_amount:,.2f}) | "

@@ -463,7 +463,7 @@ RSI: {rsi:.1f}
 종목코드: {ticker}
 주문번호: {order_no}
 RSI: {rsi:.1f}{macd_info}
-수량: {quantity}주 (${quantity * current_price:.2f})
+수량: {quantity}주 (${quantity * current_price:,.2f})
 현재가: ${current_price:.2f}
 평가손익: ${profit_loss:.2f}
 남은수량: {stock_balance['quantity'] - quantity}주
@@ -537,8 +537,14 @@ RSI: {rsi:.1f}{macd_info}
             # 데이터 연결 상태 확인 (실패해도 계속 진행)
             if not rsi_strategy.validateDataConnection():
                 self.logger.warning(f"{ticker} RSI 데이터 연결 경고 - 계속 진행합니다.")
-     
-        # 장 시작시 봇 정보와 보유 종목 현황을 통합하여 한 번에 전송
+    
+        # 시작 시점 미체결 주문 동기화 -> active_orders 초기화
+        try:
+            self.syncActiveOrders()
+        except Exception as e:
+            self.logger.error(f"미체결 주문 동기화 오류: {e}")
+
+         # 장 시작시 봇 정보와 보유 종목 현황을 통합하여 한 번에 전송
         self.sendPortfolioStatus()
         
         # WebSocket 체결통보 연결 시작
@@ -746,45 +752,131 @@ RSI: {rsi:.1f}{macd_info}
             
         if to_remove:
             self.logger.info(f"완료된 주문 정리: {len(to_remove)}개 주문 제거")
-    
+   
     def hasUnfilledOrders(self, ticker: str, market: str = "NASD"):
-        """특정 종목의 미체결 주문이 있는지 KIS API로 확인"""
+        """특정 종목의 미체결 주문 존재 여부를 주문체결내역 API로 확인
+
+        주의: 모의계좌는 API 제약으로 settle_div가 강제(전체)될 수 있습니다.
+        """
         try:
-            # 오늘 날짜로 미체결 내역 조회
-            today = datetime.now().strftime("%Y%m%d")
-            
-            # 실전/모의투자 tr_id 구분
-            tr_id = "TTTS3035R" if not self.kis_base.is_virtual else "VTTS3035R"
-            
-            params = {
-                "CANO": self.kis_base.cano,
-                "ACNT_PRDT_CD": self.kis_base.acnt_prdt_cd,
-                "TR_ID": tr_id,
-                "CTX_AREA_FK200": "",
-                "CTX_AREA_NK200": "",
-                "INQR_STRT_DT": today,
-                "INQR_END_DT": today,
-                "SLL_BUY_DVSN": "",  # 매매구분 (전체)
-                "OVRS_EXCG_CD": market,
-                "PDNO": ticker,
-                "CCLD_NCCS_DVSN": "2"  # 체결미체결구분 2:미체결
-            }
-            
-            path = "uapi/overseas-stock/v1/trading/inquire-ccnl"
-            result = self.kis_base.sendRequest("GET", path, tr_id, params=params)
-            
-            unfilled_orders = result.get('output1', [])
-            if unfilled_orders:
-                self.logger.info(f"미체결 주문 발견: {ticker} - {len(unfilled_orders)}건")
-                for order in unfilled_orders:
-                    self.logger.info(f"  주문번호: {order.get('odno', '')}, 미체결량: {order.get('nccs_qty', '')}주")
+            parse_market = self.kis_base.changeMarketCode(market, length=4)
+            # 미체결만 조회 (실계좌에서는 정확히 필터됨). 페이징은 내부에서 처리(fetch_all=True).
+            orders = self.kis_account.getOverseasOrderHistory(
+                ticker=ticker,
+                settle_div="02",  # 02: 미체결
+                market=parse_market,
+                fetch_all=True
+            )
+
+            # 모의계좌에서는 settle_div 필터가 적용되지 않으므로
+            # 응답 데이터에서 nccs_qty(미체결수량) 기준으로 재필터링
+            unfilled = []
+            if isinstance(orders, list):
+                for o in orders:
+                    qty_str = str(o.get('nccs_qty', '0')).replace(',', '').strip()
+                    try:
+                        qty = int(float(qty_str)) if qty_str else 0
+                    except Exception:
+                        qty = 0
+                    if qty > 0:
+                        unfilled.append(o)
+
+            count = len(unfilled)
+            if count > 0:
+                self.logger.info(f"미체결 주문 발견: {ticker} - {count}건")
+                # 상세 로그는 과도한 출력 방지를 위해 상위 3건만 표시
+                for order in unfilled[:3]:
+                    self.logger.info(f"  주문번호: {order.get('odno', '')}, 미체결수량: {order.get('nccs_qty', '0')}")
                 return True
-            
+
             return False
-            
+
         except Exception as e:
-            self.logger.error(f"미체결 주문 조회 오류: {str(e)}")
-            return False  # 오류 발생시 안전하게 False 반환
+            self.logger.error(f"미체결 주문 조회 오류: {e}")
+            return False
+
+    def syncActiveOrders(self):
+        """계좌의 미체결 주문을 조회해 active_orders를 초기화"""
+        synced = 0
+        for ticker, market in self.trading_tickers.items():
+            try:
+                parse_market = self.kis_base.changeMarketCode(market, length=4)
+                orders = self.kis_account.getOverseasOrderHistory(
+                    ticker=ticker,
+                    settle_div="02",  # 미체결
+                    market=parse_market,
+                    fetch_all=True
+                )
+
+                # nccs_qty(미체결수량) 기준 필터링 (모의계좌 호환)
+                unfilled = []
+                if isinstance(orders, list):
+                    for o in orders:
+                        qty_str = str(o.get('nccs_qty', '0')).replace(',', '').strip()
+                        try:
+                            qty = int(float(qty_str)) if qty_str else 0
+                        except Exception:
+                            qty = 0
+                        if qty > 0:
+                            unfilled.append(o)
+
+                for o in unfilled:
+                    order_no = str(o.get('odno', '')).strip()
+                    if not order_no:
+                        continue
+                    if order_no in self.active_orders:
+                        continue
+
+                    # 주문 종류 매핑
+                    bs = o.get('sll_buy_dvsn_cd', '')
+                    order_type = '매수' if bs == '02' else ('매도' if bs == '01' else f"주문({bs})")
+
+                    # 수량 계산
+                    rem_qty_str = str(o.get('nccs_qty', '0')).replace(',', '').strip()
+                    try:
+                        remaining_qty = int(float(rem_qty_str)) if rem_qty_str else 0
+                    except Exception:
+                        remaining_qty = 0
+
+                    total_qty = None
+                    for key in ['tot_ord_qty', 'ord_qty']:
+                        if key in o:
+                            try:
+                                total_qty = int(str(o.get(key, '0')).replace(',', '').strip())
+                                break
+                            except Exception:
+                                total_qty = None
+                    if not total_qty or total_qty < remaining_qty:
+                        total_qty = remaining_qty
+
+                    executed_qty = max(total_qty - remaining_qty, 0)
+
+                    # 가격(가능한 경우만)
+                    price = 0.0
+                    for pkey in ['ovrs_ord_unpr', 'ord_unpr']:
+                        if pkey in o:
+                            try:
+                                price = float(str(o.get(pkey, '0')).replace(',', '').strip())
+                                break
+                            except Exception:
+                                price = 0.0
+
+                    # 추적 테이블에 반영
+                    self.active_orders[order_no] = {
+                        'ticker': ticker,
+                        'order_type': order_type,
+                        'total_qty': total_qty,
+                        'executed_qty': executed_qty,
+                        'remaining_qty': remaining_qty,
+                        'price': price,
+                        'market': market
+                    }
+                    synced += 1
+            except Exception as e:
+                self.logger.error(f"{ticker} 미체결 동기화 오류: {e}")
+
+        if synced:
+            self.logger.info(f"시작 시 미체결 주문 {synced}건 동기화 완료")
 
     async def handle_execution_notification(self, execution_info: dict):
         """체결통보 처리 함수"""

@@ -366,6 +366,11 @@ class TradingBot:
     def executeBuyOrder(self, ticker, market, current_price: float):
         """매수 주문 실행"""
         try:
+            # 미체결 주문 확인
+            if self.hasUnfilledOrders(ticker, market):
+                self.logger.info(f"{ticker} 미체결 주문이 있어 새로운 매수 주문을 취소합니다")
+                return False
+                
             rsi_strategy = self.rsi_strategies[ticker]
             cash_balance = self.getPurchaseAmount(ticker, market, current_price)
             quantity = self.calculateBuyQuantity(ticker, cash_balance, current_price)
@@ -413,6 +418,11 @@ RSI: {rsi:.1f}
     def executeSellOrder(self, ticker, market, current_price: float):
         """매도 주문 실행"""
         try:
+            # 미체결 주문 확인
+            if self.hasUnfilledOrders(ticker, market):
+                self.logger.info(f"{ticker} 미체결 주문이 있어 새로운 매도 주문을 취소합니다")
+                return False
+                
             rsi_strategy = self.rsi_strategies[ticker]
             macd_strategy = self.macd_strategies[ticker]
             stock_balance = self.getStockBalance(ticker, market)
@@ -736,6 +746,45 @@ RSI: {rsi:.1f}{macd_info}
             
         if to_remove:
             self.logger.info(f"완료된 주문 정리: {len(to_remove)}개 주문 제거")
+    
+    def hasUnfilledOrders(self, ticker: str, market: str = "NASD"):
+        """특정 종목의 미체결 주문이 있는지 KIS API로 확인"""
+        try:
+            # 오늘 날짜로 미체결 내역 조회
+            today = datetime.now().strftime("%Y%m%d")
+            
+            # 실전/모의투자 tr_id 구분
+            tr_id = "TTTS3035R" if not self.kis_base.is_virtual else "VTTS3035R"
+            
+            params = {
+                "CANO": self.kis_base.cano,
+                "ACNT_PRDT_CD": self.kis_base.acnt_prdt_cd,
+                "TR_ID": tr_id,
+                "CTX_AREA_FK200": "",
+                "CTX_AREA_NK200": "",
+                "INQR_STRT_DT": today,
+                "INQR_END_DT": today,
+                "SLL_BUY_DVSN": "",  # 매매구분 (전체)
+                "OVRS_EXCG_CD": market,
+                "PDNO": ticker,
+                "CCLD_NCCS_DVSN": "2"  # 체결미체결구분 2:미체결
+            }
+            
+            path = "uapi/overseas-stock/v1/trading/inquire-ccnl"
+            result = self.kis_base.sendRequest("GET", path, tr_id, params=params)
+            
+            unfilled_orders = result.get('output1', [])
+            if unfilled_orders:
+                self.logger.info(f"미체결 주문 발견: {ticker} - {len(unfilled_orders)}건")
+                for order in unfilled_orders:
+                    self.logger.info(f"  주문번호: {order.get('odno', '')}, 미체결량: {order.get('nccs_qty', '')}주")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"미체결 주문 조회 오류: {str(e)}")
+            return False  # 오류 발생시 안전하게 False 반환
 
     async def handle_execution_notification(self, execution_info: dict):
         """체결통보 처리 함수"""
@@ -808,7 +857,6 @@ RSI: {rsi:.1f}{macd_info}
 주문번호: {order_no}
 총 체결량: {total_order_qty}주 (${total_order_qty * price:,.2f})
 현재가: ${price:.2f}
-✅ <b>전량 체결 완료!</b>
 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
                         
                         # 텔레그램 전송

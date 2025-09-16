@@ -337,7 +337,7 @@ class KisAccount(KisBase):
                 else:
                     break
             
-            self.logger.info(f"해외주식 주문내역 전체 조회 완료: 종목 {ticker}, 총 {len(all_data)}건, {page_count}페이지")
+            # self.logger.info(f"해외주식 주문내역 전체 조회 완료: 종목 {ticker}, 총 {len(all_data)}건, {page_count}페이지")
             return all_data
         
         # 단일 페이지 조회 모드

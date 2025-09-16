@@ -36,6 +36,9 @@ class RSIStrategy:
         
         # KIS 가격 조회 객체
         self.kis_price = KisPrice()
+
+        # 최근 계산된 RSI 값 (인터벌 내 재사용)
+        self.last_rsi: Optional[float] = None
     
     def validateDataConnection(self):
         """데이터 연결 상태 확인 (선택적 호출)"""
@@ -62,12 +65,18 @@ class RSIStrategy:
             self.logger.error(f"데이터 연결 확인 실패: {e}")
             return False
     
-    def getCurrentRsi(self):
-        """환경변수 기반 RSI 값 계산"""
+    def getCurrentRsi(self, force_refresh: bool = False):
+        """환경변수 기반 RSI 값 계산 (캐시 활용)"""
+        if not force_refresh and self.last_rsi is not None:
+            return self.last_rsi
+
         if self.interval == "day":
-            return self._getRsiFromDaily()
+            rsi = self._getRsiFromDaily()
         else:
-            return self._getRsiFromMinute(self.interval)
+            rsi = self._getRsiFromMinute(self.interval)
+
+        self.last_rsi = rsi
+        return rsi
     
     def _getRsiFromDaily(self):
         """일봉 데이터로 RSI 계산"""
@@ -196,7 +205,7 @@ class RSIStrategy:
     
     def getStrategyStatus(self):
         """전략 현재 상태 반환"""
-        rsi = self.getCurrentRsi()
+        rsi = self.getCurrentRsi(force_refresh=True)
         current_price = self.getCurrentPrice()
         
         return {

@@ -246,8 +246,8 @@ class TradingBot:
             if not buy_orders:
                 return None
             
-            # odno 주문번호 기준 내림차순 (최신순)
-            buy_orders.sort(key=lambda x: (x.get('odno', '')), reverse=True)
+            # ord_dt(주문일자) 기준 1차 내림차순, 동일일자 내에서는 odno 기준 2차 내림차순
+            buy_orders.sort(key=lambda x: (x.get('ord_dt', ''), x.get('odno', '')), reverse=True)
             
             # 가장 최신 매수 주문의 order_time만 반환 (한국시간 기준)
             latest_order = buy_orders[0]
@@ -285,8 +285,8 @@ class TradingBot:
             if not sell_orders:
                 return None
             
-            # odno 주문번호 기준 내림차순 (최신순)
-            sell_orders.sort(key=lambda x: (x.get('odno', '')), reverse=True)
+            # ord_dt(주문일자) 기준 1차 내림차순, 동일일자 내에서는 odno 기준 2차 내림차순
+            sell_orders.sort(key=lambda x: (x.get('ord_dt', ''), x.get('odno', '')), reverse=True)
             
             # 가장 최신 매도 주문의 order_time만 반환 (한국시간 기준)
             latest_order = sell_orders[0]
@@ -495,9 +495,12 @@ RSI: {rsi:.1f}{macd_info}
                 if current_price <= 0:
                     self.logger.warning(f"{ticker} 유효한 가격 정보를 가져올 수 없습니다.")
                     continue
-                
-                self.logger.info(f"{ticker} 현재가: ${current_price:.2f}")
-                
+
+                # 최신 RSI를 미리 계산해 신호 판단에서 재사용
+                rsi_strategy.getCurrentRsi(force_refresh=True)
+
+                self.logger.info(f"{ticker} 현재가: ${current_price:.2f} RSI: {rsi_strategy.getCurrentRsi():.1f}")
+
                 # 매수 신호 확인
                 if self.shouldBuy(ticker, market, current_price):
                     self.logger.info(f"{ticker} 매수 신호 감지!")

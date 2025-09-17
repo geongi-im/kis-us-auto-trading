@@ -49,10 +49,14 @@ class TradingBot:
         # 매수/매도 거래 비중 가져오기
         buy_rate = float(os.getenv("BUY_RATE"))
         sell_rate = float(os.getenv("SELL_RATE"))
+        self.buy_rate = buy_rate
+        self.sell_rate = sell_rate
 
         # 기술적 지표 설정 정보 출력
         rsi_oversold = int(os.getenv("RSI_OVERSOLD"))
         rsi_overbought = int(os.getenv("RSI_OVERBOUGHT"))
+        self.rsi_interval = os.getenv("RSI_INTERVAL")
+        self.macd_interval = os.getenv("MACD_INTERVAL")
         
         # 각 종목별 RSI 및 MACD 전략 생성
         self.rsi_strategies = {}
@@ -788,6 +792,12 @@ RSI: {rsi:.1f}{macd_info}
         message += f"계좌번호: {account_no} ({env_type})\n"
         message += f"탐지 종목: {', '.join(ticker_names)}\n"
         message += f"탐지 간격: {self.check_interval_minutes}분\n"
+        message += f"매수 대기시간: {self.buy_delay_minutes}분\n"
+        message += f"매도 대기시간: {self.sell_delay_minutes}분\n"
+        message += f"매수 비율: {(self.buy_rate*100):.2f}%\n"
+        message += f"매도 비율: {(self.sell_rate*100):.2f}%\n"
+        message += f"RSI 인터벌: {self.rsi_interval}\n"
+        message += f"MACD 인터벌: {self.macd_interval}\n"
         message += f"매수 신호(RSI 과매도): {list(self.rsi_strategies.values())[0].rsi_oversold} 이하\n"
         message += f"매도 신호(RSI 과매수): {list(self.rsi_strategies.values())[0].rsi_overbought} 이상 + MACD 골든크로스\n\n"
 

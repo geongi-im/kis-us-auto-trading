@@ -3,7 +3,6 @@ import os
 import pytz
 import traceback
 from datetime import datetime, time
-from typing import Optional, Dict
 from kis_order import KisOrder
 from kis_account import KisAccount
 from kis_base import KisBase
@@ -19,7 +18,7 @@ import holidays
 class TradingBot:
     """한국투자증권 해외 주식 자동매매 봇"""
     
-    def __init__(self, trading_tickers: dict):
+    def __init__(self, trading_tickers):
         
         # 로거 초기화
         self.logger = LoggerUtil().get_logger()
@@ -32,6 +31,11 @@ class TradingBot:
         self.check_interval_minutes = int(os.getenv("CHECK_INTERVAL_MINUTES"))
         self.buy_delay_minutes = int(os.getenv("BUY_DELAY_MIN"))
         self.sell_delay_minutes = int(os.getenv("SELL_DELAY_MIN"))
+
+        stop_loss_rate = os.getenv("STOP_LOSS_RATE")
+        self.stop_loss_rate = float(stop_loss_rate) if stop_loss_rate is not None else None
+        if self.stop_loss_rate is not None:
+            self.logger.info(f"손절매 기준 수익률 설정: {self.stop_loss_rate:.2f}%")
         
         # KIS API 객체들
         self.kis_order = KisOrder()
@@ -190,7 +194,6 @@ class TradingBot:
         except Exception as e:
             self.logger.error(f"주식 잔고 조회 중 오류 발생: {e}")
             return {'quantity': 0, 'avg_price': 0, 'current_price': 0, 'profit_loss': 0}
-        
     def getPurchaseAmount(self, ticker, market, price="0"):
         """특정 종목 기준 매수 가능 금액 조회"""
         try:
@@ -208,7 +211,7 @@ class TradingBot:
             self.logger.error(f"{ticker} 매수가능현금 조회 중 오류 발생: {e}")
             return 0.0
     
-    def calculateBuyQuantity(self, ticker, cash_balance: float, current_price: float):
+    def calculateBuyQuantity(self, ticker, cash_balance, current_price):
         """매수 수량 계산 (현금의 5%)"""
         rsi_strategy = self.rsi_strategies[ticker]
         buy_amount = cash_balance * rsi_strategy.buy_rate
@@ -300,7 +303,7 @@ class TradingBot:
             
         return None
     
-    def shouldBuy(self, ticker, market, current_price: float):
+    def shouldBuy(self, ticker, market, current_price):
         """매수 신호 종합 판단 (RSI + 대기시간 + 계좌 조건)"""
         rsi_strategy = self.rsi_strategies[ticker]
         
@@ -363,7 +366,7 @@ class TradingBot:
         
         return True
 
-    def executeBuyOrder(self, ticker, market, current_price: float):
+    def executeBuyOrder(self, ticker, market, current_price):
         """매수 주문 실행"""
         try:
             # 미체결 주문 확인
@@ -415,7 +418,7 @@ RSI: {rsi:.1f}
             
         return False
     
-    def executeSellOrder(self, ticker, market, current_price: float):
+    def executeSellOrder(self, ticker, market, current_price):
         """매도 주문 실행"""
         try:
             # 미체결 주문 확인
@@ -477,16 +480,147 @@ RSI: {rsi:.1f}{macd_info}
             error_msg = f"{ticker} 매도 주문 실행 중 오류: {e}"
             self.logger.error(error_msg)
             self.telegram.sendMessage(f"[오류] {ticker} 매도 오류: {error_msg}")
-            
+
         return False
-    
+
+    def checkStopLoss(self, ticker, market, present_balance_stocks):
+        """현재잔고 평가수익률을 기반으로 손절 조건을 점검"""
+        stock_balance = self.getStockBalance(ticker, market)
+        quantity = stock_balance.get('quantity', 0)
+        if quantity is None or quantity <= 0:
+            return False
+
+        ticker_code = str(ticker).strip().upper()
+        balance_stock = None
+        for stock in present_balance_stocks or []:
+            if not isinstance(stock, dict):
+                continue
+            code = stock.get('ovrs_pdno') or stock.get('pdno')
+            if code and str(code).strip().upper() == ticker_code:
+                balance_stock = stock
+                break
+
+        if balance_stock is None:
+            self.logger.debug(f"{ticker} 현재잔고 데이터가 없어 손절 확인을 건너뜁니다.")
+            return False
+
+        raw_rate = balance_stock.get('evlu_pfls_rt1')
+        if raw_rate is None:
+            self.logger.debug(f"{ticker} 평가수익률(evlu_pfls_rt1) 데이터가 없습니다.")
+            return False
+
+        try:
+            if isinstance(raw_rate, str):
+                cleaned = raw_rate.replace(',', '').replace('%', '').strip()
+                profit_rate = float(cleaned) if cleaned else None
+            else:
+                profit_rate = float(raw_rate)
+        except (ValueError, TypeError):
+            profit_rate = None
+
+        if profit_rate is None:
+            self.logger.debug(f"{ticker} 평가수익률(evlu_pfls_rt1) 값을 해석할 수 없습니다.")
+            return False
+
+        if self.stop_loss_rate is None:
+            return False
+
+        if profit_rate < self.stop_loss_rate:
+            self.logger.info(
+                f"{ticker} 손절 조건 충족: 평가수익률 {profit_rate:.2f}% < 기준 {self.stop_loss_rate:.2f}%"
+            )
+            return self.executeStopLossSell(
+                ticker=ticker,
+                market=market,
+                quantity=int(quantity),
+                profit_rate=profit_rate,
+                stock_balance=stock_balance
+            )
+
+        return False
+
+    def executeStopLossSell(self, ticker, market, quantity, profit_rate, stock_balance):
+        """손절 조건 충족 시 시장가 매도 주문 실행"""
+        if quantity <= 0:
+            return False
+
+        try:
+            parse_market = self.kis_base.changeMarketCode(market, length=4)
+            result = self.kis_order.sellOrder(
+                ticker=ticker,
+                quantity=quantity,
+                price=0,
+                market=parse_market,
+                ord_dvsn="01"  # 시장가 주문
+            )
+
+            if result:
+                self.total_trades += 1
+
+                order_no_raw = result.get('ODNO', '')
+                order_no = str(order_no_raw).strip()
+                if order_no:
+                    try:
+                        order_no = str(int(order_no))
+                    except (ValueError, TypeError):
+                        pass
+                    self.addOrderToTracker(order_no, ticker, '매도', quantity, 0.0, market)
+
+                profit_loss = stock_balance.get('profit_loss', 0.0)
+                avg_price = stock_balance.get('avg_price', 0.0)
+                message = (
+                    f"""<b>🟧 [손절] 시장가 매도</b>
+종목코드: {ticker}
+주문번호: {order_no or '미확인'}
+수량: {quantity}주
+평균단가: ${avg_price:.2f}
+평가손익: ${profit_loss:,.2f}
+평가수익률: {profit_rate:.2f}%
+손절기준: {self.stop_loss_rate:.2f}%
+시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+                )
+
+                self.telegram.sendMessage(message)
+                self.logger.info(
+                    f"{ticker} 손절 시장가 매도 주문 제출: {quantity}주, 평가수익률 {profit_rate:.2f}%"
+                )
+                return True
+
+        except Exception as e:
+            error_msg = f"{ticker} 손절 매도 주문 실행 중 오류: {e}"
+            self.logger.error(error_msg)
+            self.telegram.sendMessage(f"[오류] {ticker} 손절 주문 오류: {error_msg}")
+
+        return False
+
     def processTradingSignal(self):
         """모든 종목에 대한 매매 신호 처리"""
+        present_balance_stocks = None
+
         for ticker, market in self.trading_tickers.items():
             try:
                 rsi_strategy = self.rsi_strategies[ticker]
                 macd_strategy = self.macd_strategies[ticker]
-                
+
+                if self.stop_loss_rate is not None:
+                    if present_balance_stocks is None:
+                        try:
+                            balance_data = self.kis_account.getOverseasPresentBalance()
+                            stocks = balance_data.get('stocks', [])
+                            if isinstance(stocks, list):
+                                present_balance_stocks = stocks
+                            else:
+                                present_balance_stocks = []
+                        except Exception as balance_error:
+                            self.logger.error(f"현재잔고 조회 중 오류: {balance_error}")
+                            present_balance_stocks = []
+
+                    try:
+                        if self.checkStopLoss(ticker, market, present_balance_stocks):
+                            continue
+                    except Exception as stop_loss_error:
+                        self.logger.error(f"{ticker} 손절 점검 중 오류: {stop_loss_error}")
+
                 # 현재가 조회
                 parse_market = self.kis_base.changeMarketCode(market)
                 price_info = rsi_strategy.kis_price.getPrice(parse_market, ticker)
@@ -708,7 +842,7 @@ RSI: {rsi:.1f}{macd_info}
         
         return message
     
-    def addOrderToTracker(self, order_no: str, ticker: str, order_type: str, total_qty: int, price: float, market: str):
+    def addOrderToTracker(self, order_no, ticker, order_type, total_qty, price, market):
         """주문 추적 시스템에 새 주문 추가"""
         self.active_orders[order_no] = {
             'ticker': ticker,
@@ -721,7 +855,7 @@ RSI: {rsi:.1f}{macd_info}
         }
         self.logger.info(f"주문 추적 추가: {order_no} - {ticker} {order_type} {total_qty}주")
     
-    def updateOrderExecution(self, order_no: str, executed_qty: int):
+    def updateOrderExecution(self, order_no, executed_qty):
         """주문 체결량 업데이트"""
         if order_no in self.active_orders:
             order = self.active_orders[order_no]
@@ -738,11 +872,11 @@ RSI: {rsi:.1f}{macd_info}
                 
         return False  # 미완결 또는 주문번호 없음
     
-    def getOrderExecutionInfo(self, order_no: str):
+    def getOrderExecutionInfo(self, order_no):
         """주문 체결 정보 조회"""
         return self.active_orders.get(order_no, None)
     
-    def clearCompletedOrders(self, ticker: str = None):
+    def clearCompletedOrders(self, ticker=None):
         """완료된 주문들 정리 (특정 종목 또는 전체)"""
         to_remove = []
         for order_no, order in self.active_orders.items():
@@ -756,7 +890,7 @@ RSI: {rsi:.1f}{macd_info}
         if to_remove:
             self.logger.info(f"완료된 주문 정리: {len(to_remove)}개 주문 제거")
    
-    def hasUnfilledOrders(self, ticker: str, market: str = "NASD"):
+    def hasUnfilledOrders(self, ticker, market="NASD"):
         """특정 종목의 미체결 주문 존재 여부를 주문체결내역 API로 확인
 
         주의: 모의계좌는 API 제약으로 settle_div가 강제(전체)될 수 있습니다.
@@ -881,7 +1015,7 @@ RSI: {rsi:.1f}{macd_info}
         if synced:
             self.logger.info(f"시작 시 미체결 주문 {synced}건 동기화 완료")
 
-    async def handle_execution_notification(self, execution_info: dict):
+    async def handle_execution_notification(self, execution_info):
         """체결통보 처리 함수"""
         try:
             self.logger.info("🎉 === 실시간 체결통보 수신 ===")

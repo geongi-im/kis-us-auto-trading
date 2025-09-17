@@ -111,6 +111,11 @@ class KisOrder(KisBase):
         Returns:
             dict: 주문 결과 데이터
         """
+
+        # 모의투자 제약사항 적용
+        if self.is_virtual:
+            ord_dvsn = "00"      # 모의투자는 00(지정가)만 가능
+
         tr_id = self._getTrId('sell')
         
         body = {

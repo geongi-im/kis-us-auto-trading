@@ -39,7 +39,7 @@ def checkEnvVariables():
                      'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'MARKET_START_TIME', 
                      'MARKET_END_TIME', 'AUTO_SHUTDOWN_TIME', 'RSI_OVERSOLD', 'RSI_OVERBOUGHT',
                      'BUY_DELAY_MIN', 'SELL_DELAY_MIN', 'CHECK_INTERVAL_MINUTES', 'TRADING_TICKERS',
-                     'BUY_RATE', 'SELL_RATE', 'RSI_INTERVAL', 'MACD_INTERVAL']
+                     'BUY_RATE', 'SELL_RATE', 'RSI_INTERVAL', 'MACD_INTERVAL', 'STOP_LOSS_RATE']
     missing_vars = [var for var in required_vars if os.getenv(var) is None]
     
     if missing_vars:

@@ -796,8 +796,8 @@ RSI: {rsi:.1f}{macd_info}
         message += f"매도 대기시간: {self.sell_delay_minutes}분\n"
         message += f"매수 비율: {(self.buy_rate*100):.2f}%\n"
         message += f"매도 비율: {(self.sell_rate*100):.2f}%\n"
-        message += f"RSI 인터벌: {self.rsi_interval}\n"
-        message += f"MACD 인터벌: {self.macd_interval}\n"
+        message += f"RSI 인터벌: {'일봉' if self.rsi_interval == 'day' else str(self.rsi_interval) + '분'}\n"
+        message += f"MACD 인터벌: {'일봉' if self.macd_interval == 'day' else str(self.macd_interval) + '분'}\n"
         message += f"매수 신호(RSI 과매도): {list(self.rsi_strategies.values())[0].rsi_oversold} 이하\n"
         message += f"매도 신호(RSI 과매수): {list(self.rsi_strategies.values())[0].rsi_overbought} 이상 + MACD 골든크로스\n\n"
 

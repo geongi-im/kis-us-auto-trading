@@ -1,4 +1,4 @@
-# KIS-US-AUTO-TRADING
+﻿# KIS-US-AUTO-TRADING
 한국투자증권 API를 활용한 해외주식 자동매매 시스템
 
 ## 기능 설명
@@ -9,19 +9,8 @@
 5. 시세 조회 기능
 
 ## 환경 설정
-1. `.env` 파일을 생성하고 다음 정보를 입력하세요:
-```
-# API 키 및 시크릿
-APP_KEY=your_app_key_here
-APP_SECRET=your_app_secret_here
-
-# URL 설정
-REST_URL_BASE=https://openapivts.koreainvestment.com:29443 # 모의투자용 REST API URL
-WS_URL_BASE=ws://ops.koreainvestment.com:31000 # 모의투자용 웹소켓 URL
-
-# 계좌 설정
-ACCOUNT_NO=your_account_number_here # 모의투자 계좌번호(앞 8자리 + 뒷 2자리)
-```
+1. `.env.sample` 파일을 복사하여 `.env`를 생성하세요. (예: `cp .env.sample .env`)
+2. `.env` 파일을 열고 필수 환경변수 정보를 입력하세요.
 
 ## 파일 구성
 - `kis_base.py`: 기본 API 클래스 (공통 인증 및 요청 처리)

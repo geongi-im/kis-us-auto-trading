@@ -530,9 +530,7 @@ RSI: {rsi:.1f}{macd_info}
             return False
 
         if profit_rate < self.stop_loss_rate:
-            self.logger.info(
-                f"{ticker} 손절 조건 충족: 평가수익률 {profit_rate:.2f}% < 기준 {self.stop_loss_rate:.2f}%"
-            )
+            self.logger.info(f"{ticker} 손절 조건 충족: 평가수익률 {profit_rate:.2f}% < 기준 {self.stop_loss_rate:.2f}%")
             return self.executeStopLossSell(
                 ticker=ticker,
                 market=market,
